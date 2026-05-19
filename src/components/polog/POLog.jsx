@@ -853,27 +853,31 @@ const POLog = () => {
     }
 
     // All matching inside updater to avoid stale-closure problem
-    let matched = 0;
     setParsedRows((prevRows) => {
+      const matchedPRs = new Set();
       const nextRows = prevRows.map(row => {
         const rowPr = normalizePr((row['Req Ref'] || '').trim());
         if (!rowPr || rowPr === 'PR-' || rowPr === 'PR-N/A') return row;
         const found = prTotals[rowPr];
         if (found !== undefined) {
-          matched++;
+          matchedPRs.add(rowPr);
           const netPrice = found;
           const vatNum = netPrice * 0.05;
           const totalPrice = netPrice + vatNum;
           return {
             ...row,
             'Net Price': netPrice.toFixed(2),
+            'Price': netPrice.toFixed(2), // Send generic Price field
             'VAT': vatNum.toFixed(2),
             'Total Price': totalPrice.toFixed(2),
+            'Total': totalPrice.toFixed(2), // Send generic Total field
             _rateUpdated: true,
           };
         }
         return row;
       });
+
+      const matched = matchedPRs.size;
 
       // Map the extracted materials to the final materialRows format
       const newMaterialRows = extractedMaterials.map(mat => {
@@ -2005,19 +2009,33 @@ const POLog = () => {
 
                 {origVal > 0 && (
                   <div className="mt-6 p-5 rounded-2xl border bg-black/40 flex flex-col md:flex-row items-center justify-between gap-5 border-[rgba(255,255,255,0.05)] shadow-md">
-                    <div className="flex items-center gap-6 w-full md:w-auto justify-center md:justify-start">
+                    <div className="flex items-start md:items-center gap-6 w-full md:w-auto justify-center md:justify-start">
                       <div className="text-center md:text-left">
                         <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Initial Price (Baseline)</p>
                         <p className="text-sm font-semibold text-[rgba(255,255,255,0.45)] line-through mt-0.5">AED {originalPriceStr}</p>
                       </div>
-                      <div className="text-sm text-[rgba(255,255,255,0.2)] font-black">➔</div>
+                      <div className="text-sm text-[rgba(255,255,255,0.2)] font-black mt-3 md:mt-0">➔</div>
                       <div className="text-center md:text-left">
                         <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-widest">Current Price (Net)</p>
                         <p className="text-sm font-black text-white mt-0.5">AED {netPriceStr}</p>
+                        {(() => {
+                          const modalPrDetails = prDetails[selectedCard.Ref];
+                          const prRemarks = Array.isArray(modalPrDetails) 
+                            ? modalPrDetails.map(item => item.remark).filter(Boolean).join(' | ') 
+                            : null;
+                          if (prRemarks) {
+                            return (
+                              <p className="text-[10px] text-[rgba(255,255,255,0.5)] italic mt-1.5 max-w-[250px] leading-tight border-l-2 border-[rgba(245,158,11,0.5)] pl-2 py-0.5">
+                                {prRemarks}
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
 
-                    <div className={`px-5 py-3 rounded-xl border flex flex-col items-center md:items-end w-full md:w-auto ${
+                    <div className={`px-5 py-3 rounded-xl border flex flex-col items-center md:items-end w-full md:w-auto self-start md:self-auto ${
                       netVal > origVal 
                         ? 'bg-[rgba(239,68,68,0.05)] border-[rgba(239,68,68,0.15)]' 
                         : netVal < origVal 
