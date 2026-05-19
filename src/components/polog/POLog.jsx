@@ -185,12 +185,12 @@ const POLogCard = ({ row }) => {
       </div>
 
       {/* Price comparison extra row */}
-      {hasOriginalPrice && hasChangePrice && (
+      {hasOriginalPrice && row['Net Price'] && (
         <div className="text-[10px] text-[rgba(255,255,255,0.4)] flex items-center gap-1.5 bg-[#090e17] px-3 py-1.5 rounded-xl border border-[rgba(255,255,255,0.03)] w-fit mt-1">
           <span className="font-extrabold text-[#F59E0B] uppercase text-[8px]">Comparison:</span>
           <span className="line-through">AED {hasOriginalPrice}</span>
           <span className="text-[#F59E0B]">→</span>
-          <span className="text-white font-bold">AED {hasChangePrice}</span>
+          <span className="text-white font-bold">AED {row['Net Price']}</span>
         </div>
       )}
     </div>
@@ -317,11 +317,17 @@ const POLog = () => {
 
   const netPriceStr = selectedCard ? (selectedCard['Net Price'] || '0.00') : '0.00';
   const originalPriceStr = selectedCard ? (selectedCard['Original Pirce'] || selectedCard['Original Price'] || '0.00') : '0.00';
-  const changePriceStr = selectedCard ? (selectedCard['Change in Price'] || '0.00') : '0.00';
   
   const netVal = parseFloat(String(netPriceStr).replace(/,/g, '')) || 0;
   const origVal = parseFloat(String(originalPriceStr).replace(/,/g, '')) || 0;
-  const changeVal = parseFloat(String(changePriceStr).replace(/,/g, '')) || 0;
+  
+  const rawChangeStr = selectedCard ? (selectedCard['Change in Price'] || '0.00') : '0.00';
+  const computedChangeVal = Math.abs(netVal - origVal);
+  const changePriceStr = computedChangeVal > 0 
+    ? computedChangeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+    : rawChangeStr;
+
+  const changeVal = computedChangeVal > 0 ? computedChangeVal : (parseFloat(String(rawChangeStr).replace(/,/g, '')) || 0);
   const percentChange = origVal > 0 ? ((netVal - origVal) / origVal) * 100 : 0;
 
   const handleFetchPrData = useCallback(async (row, force = false) => {
