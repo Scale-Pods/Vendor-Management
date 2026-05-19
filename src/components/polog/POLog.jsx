@@ -1595,165 +1595,190 @@ const POLog = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Card Grid Layout */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {visibleLog.map((row, idx) => {
-                  const isExpanded = expandedCardRef === row.Ref;
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => toggleExpandCard(row)}
-                      onDoubleClick={() => openDetailedModal(row)}
-                      className={`relative rounded-2xl p-6 cursor-pointer overflow-hidden transition-all duration-300 border ${
-                        isExpanded 
-                          ? 'border-[#F59E0B] shadow-[0_0_20px_rgba(245,158,11,0.15)] bg-[#1e2538]' 
-                          : 'border-[rgba(255,255,255,0.06)] bg-[#1a1f2e] hover:border-[#F59E0B] hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]'
-                      }`}
-                      style={{
-                        height: isExpanded ? 'auto' : '230px',
-                        minHeight: isExpanded ? '440px' : '230px',
-                      }}
-                    >
-                      {/* Top Header Row */}
-                      <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-base font-black text-[#F59E0B] tracking-tight uppercase truncate mr-2" title={row.Ref}>
-                          {row.Ref || 'N/A'}
-                        </h3>
-                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 ${
-                          row.Status === 'Approved' 
-                            ? 'bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.3)]' 
-                            : row.Status === 'Open' 
-                            ? 'bg-[rgba(245,158,11,0.15)] text-[#F59E0B] border border-[rgba(245,158,11,0.3)]' 
-                            : 'bg-[rgba(239,68,68,0.15)] text-[#EF4444] border border-[rgba(239,68,68,0.3)]'
-                        }`}>
-                          {row.Status || 'Open'}
-                        </span>
-                      </div>
+              {/* Card Grid Layout — Grouped by PR */}
+              {(() => {
+                // Group visible log entries by PR reference
+                const prGroups = {};
+                visibleLog.forEach((row, idx) => {
+                  const pr = row['Req Ref'] || row.Req_Ref || 'Ungrouped';
+                  if (!prGroups[pr]) prGroups[pr] = [];
+                  prGroups[pr].push({ row, idx });
+                });
 
-                      {/* Second Line: Project & Supplier */}
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between gap-3 text-white font-bold text-sm">
-                          <div className="flex items-center gap-1.5 truncate" title={row.Project}>
-                            <IconBriefcase size={14} className="text-[rgba(255,255,255,0.4)] shrink-0" />
-                            <span className="truncate">{row.Project || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[#F59E0B] font-semibold text-[11px] shrink-0 max-w-[140px]" title={row.Supplier}>
-                            <IconBuildingStore size={12} className="shrink-0" />
-                            <span className="truncate">{row.Supplier || 'N/A'}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.4)] text-[11px] font-medium truncate mt-1" title={row.Company}>
-                          <IconBuilding size={12} className="shrink-0" />
-                          <span className="truncate">{row.Company || 'N/A'}</span>
-                        </div>
-                      </div>
+                return Object.entries(prGroups).map(([prRef, items]) => (
+                  <div key={prRef} className="mb-8">
+                    {/* PR Group Header */}
+                    <div className="flex items-center gap-3 mb-4 px-1">
+                      <div className="w-1.5 h-5 rounded-full bg-[#F59E0B]" />
+                      <h3 className="text-sm font-black text-[#F59E0B] uppercase tracking-wider">{prRef}</h3>
+                      <span className="text-[9px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] px-2.5 py-1 rounded-lg">
+                        {items.length} PO{items.length > 1 ? 's' : ''}
+                      </span>
+                      <div className="flex-1 h-[1px] bg-[rgba(255,255,255,0.06)]" />
+                    </div>
 
-                      {/* Bottom Row Chips: Key Metrics */}
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        <div className="flex items-center gap-1 bg-[rgba(245,158,11,0.06)] border border-[rgba(245,158,11,0.15)] rounded-lg px-2.5 py-1 text-[#F59E0B]">
-                          <span className="text-[9px] font-extrabold uppercase opacity-60">Net:</span>
-                          <span className="text-[11px] font-black">{row['Net Price'] || '0.00'}</span>
-                        </div>
-                        <div className="flex items-center gap-1 bg-[rgba(245,158,11,0.06)] border border-[rgba(245,158,11,0.15)] rounded-lg px-2.5 py-1 text-[#F59E0B]">
-                          <span className="text-[9px] font-extrabold uppercase opacity-60">VAT:</span>
-                          <span className="text-[11px] font-black">{row['VAT'] || '0.00'}</span>
-                        </div>
-                        <div className="flex items-center gap-1 bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.25)] rounded-lg px-2.5 py-1 text-[#F59E0B] shadow-inner">
-                          <span className="text-[9px] font-extrabold uppercase opacity-60">Total:</span>
-                          <span className="text-[11px] font-black">{row['Total Price'] || '0.00'}</span>
-                        </div>
-                      </div>
-
-                      {/* Inline Expansion Area */}
-                      {isExpanded && (
-                        <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)] space-y-3 animate-slide-down">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">PO Class</p>
-                              <p className="text-[11px] text-white font-medium">{row['PO Class'] || 'N/A'}</p>
+                    {/* PO Cards within this PR */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {items.map(({ row, idx }) => {
+                        const isExpanded = expandedCardRef === row.Ref;
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => toggleExpandCard(row)}
+                            onDoubleClick={() => openDetailedModal(row)}
+                            className={`relative rounded-2xl p-6 cursor-pointer overflow-hidden transition-all duration-300 border ${
+                              isExpanded 
+                                ? 'border-[#F59E0B] shadow-[0_0_20px_rgba(245,158,11,0.15)] bg-[#1e2538]' 
+                                : 'border-[rgba(255,255,255,0.06)] bg-[#1a1f2e] hover:border-[#F59E0B] hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                            }`}
+                            style={{
+                              height: isExpanded ? 'auto' : '230px',
+                              minHeight: isExpanded ? '440px' : '230px',
+                            }}
+                          >
+                            {/* Top Header Row */}
+                            <div className="flex justify-between items-start mb-4">
+                              <h3 className="text-base font-black text-[#F59E0B] tracking-tight uppercase truncate mr-2" title={row.Ref}>
+                                {row.Ref || 'N/A'}
+                              </h3>
+                              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                                row.Status === 'Approved' 
+                                  ? 'bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.3)]' 
+                                  : row.Status === 'Open' 
+                                  ? 'bg-[rgba(245,158,11,0.15)] text-[#F59E0B] border border-[rgba(245,158,11,0.3)]' 
+                                  : 'bg-[rgba(239,68,68,0.15)] text-[#EF4444] border border-[rgba(239,68,68,0.3)]'
+                              }`}>
+                                {row.Status || 'Open'}
+                              </span>
                             </div>
-                            <div>
-                              <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">QC Ref</p>
-                              <p className="text-[11px] text-white font-medium">{row['QC Ref.'] || 'N/A'}</p>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">Doc. Remarks</p>
-                            <p className="text-[11px] text-[rgba(255,255,255,0.7)] font-medium italic truncate">{row['Doc. Remarks'] || 'No remarks'}</p>
-                          </div>
 
-                          {/* Webhook insights inside the expanded card */}
-                          <div className="mt-4 pt-3 border-t border-[rgba(255,255,255,0.06)]">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-wider">Material List PR Insights</p>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleFetchPrData(row, true);
-                                }}
-                                disabled={prLoading[row.Ref]}
-                                className="p-1 hover:bg-white/5 text-[rgba(255,255,255,0.4)] hover:text-[#F59E0B] rounded-md transition-all flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 disabled:pointer-events-none"
-                                title="Force refetch latest insights"
-                              >
-                                <IconRefresh size={10} className={prLoading[row.Ref] ? 'animate-spin' : ''} />
-                                <span>Sync</span>
-                              </button>
-                            </div>
-                            {prLoading[row.Ref] ? (
-                              <div className="flex items-center gap-2 py-1">
-                                <IconLoader2 size={12} className="text-[#F59E0B] animate-spin" />
-                                <span className="text-[10px] text-[rgba(255,255,255,0.3)]">Fetching additional webhook logs...</span>
+                            {/* Second Line: Project & Supplier */}
+                            <div className="mb-4">
+                              <div className="flex items-center justify-between gap-3 text-white font-bold text-sm">
+                                <div className="flex items-center gap-1.5 truncate" title={row.Project}>
+                                  <IconBriefcase size={14} className="text-[rgba(255,255,255,0.4)] shrink-0" />
+                                  <span className="truncate">{row.Project || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[#F59E0B] font-semibold text-[11px] shrink-0 max-w-[140px]" title={row.Supplier}>
+                                  <IconBuildingStore size={12} className="shrink-0" />
+                                  <span className="truncate">{row.Supplier || 'N/A'}</span>
+                                </div>
                               </div>
-                            ) : prError[row.Ref] ? (
-                              <p className="text-[10px] text-red-400">Failed to fetch logs: {prError[row.Ref]}</p>
-                            ) : prDetails[row.Ref] ? (
-                              <div className="bg-[rgba(255,255,255,0.02)] p-2.5 rounded-lg border border-[rgba(255,255,255,0.04)] text-[11px] text-[rgba(255,255,255,0.7)] space-y-1 max-h-[100px] overflow-y-auto scrollbar-thin">
-                                {renderWebhookDataInline(prDetails[row.Ref])}
+                              <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.4)] text-[11px] font-medium truncate mt-1" title={row.Company}>
+                                <IconBuilding size={12} className="shrink-0" />
+                                <span className="truncate">{row.Company || 'N/A'}</span>
                               </div>
-                            ) : (
-                              <p className="text-[10px] text-[rgba(255,255,255,0.25)]">No additional webhook logs available.</p>
+                            </div>
+
+                            {/* Bottom Row Chips: Key Metrics */}
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              <div className="flex items-center gap-1 bg-[rgba(245,158,11,0.06)] border border-[rgba(245,158,11,0.15)] rounded-lg px-2.5 py-1 text-[#F59E0B]">
+                                <span className="text-[9px] font-extrabold uppercase opacity-60">Net:</span>
+                                <span className="text-[11px] font-black">{row['Net Price'] || '0.00'}</span>
+                              </div>
+                              <div className="flex items-center gap-1 bg-[rgba(245,158,11,0.06)] border border-[rgba(245,158,11,0.15)] rounded-lg px-2.5 py-1 text-[#F59E0B]">
+                                <span className="text-[9px] font-extrabold uppercase opacity-60">VAT:</span>
+                                <span className="text-[11px] font-black">{row['VAT'] || '0.00'}</span>
+                              </div>
+                              <div className="flex items-center gap-1 bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.25)] rounded-lg px-2.5 py-1 text-[#F59E0B] shadow-inner">
+                                <span className="text-[9px] font-extrabold uppercase opacity-60">Total:</span>
+                                <span className="text-[11px] font-black">{row['Total Price'] || '0.00'}</span>
+                              </div>
+                            </div>
+
+                            {/* Inline Expansion Area */}
+                            {isExpanded && (
+                              <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)] space-y-3 animate-slide-down">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">PO Class</p>
+                                    <p className="text-[11px] text-white font-medium">{row['PO Class'] || 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">QC Ref</p>
+                                    <p className="text-[11px] text-white font-medium">{row['QC Ref.'] || 'N/A'}</p>
+                                  </div>
+                                </div>
+                                
+                                <div>
+                                  <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">Doc. Remarks</p>
+                                  <p className="text-[11px] text-[rgba(255,255,255,0.7)] font-medium italic truncate">{row['Doc. Remarks'] || 'No remarks'}</p>
+                                </div>
+
+                                {/* Webhook insights inside the expanded card */}
+                                <div className="mt-4 pt-3 border-t border-[rgba(255,255,255,0.06)]">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-wider">Material List PR Insights</p>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleFetchPrData(row, true);
+                                      }}
+                                      disabled={prLoading[row.Ref]}
+                                      className="p-1 hover:bg-white/5 text-[rgba(255,255,255,0.4)] hover:text-[#F59E0B] rounded-md transition-all flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 disabled:pointer-events-none"
+                                      title="Force refetch latest insights"
+                                    >
+                                      <IconRefresh size={10} className={prLoading[row.Ref] ? 'animate-spin' : ''} />
+                                      <span>Sync</span>
+                                    </button>
+                                  </div>
+                                  {prLoading[row.Ref] ? (
+                                    <div className="flex items-center gap-2 py-1">
+                                      <IconLoader2 size={12} className="text-[#F59E0B] animate-spin" />
+                                      <span className="text-[10px] text-[rgba(255,255,255,0.3)]">Fetching additional webhook logs...</span>
+                                    </div>
+                                  ) : prError[row.Ref] ? (
+                                    <p className="text-[10px] text-red-400">Failed to fetch logs: {prError[row.Ref]}</p>
+                                  ) : prDetails[row.Ref] ? (
+                                    <div className="bg-[rgba(255,255,255,0.02)] p-2.5 rounded-lg border border-[rgba(255,255,255,0.04)] text-[11px] text-[rgba(255,255,255,0.7)] space-y-1 max-h-[100px] overflow-y-auto scrollbar-thin">
+                                      {renderWebhookDataInline(prDetails[row.Ref])}
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-[rgba(255,255,255,0.25)]">No additional webhook logs available.</p>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDetailedModal(row);
+                                    }}
+                                    className="px-4 py-2 bg-[#F59E0B] text-black hover:bg-[#D97706] rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5"
+                                  >
+                                    <IconEye size={12} />
+                                    View Full Report
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Bottom Footer Muted text */}
+                            {!isExpanded && (
+                              <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between border-t border-[rgba(255,255,255,0.04)] pt-3 text-[10px] text-[rgba(255,255,255,0.35)] font-bold truncate">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <IconUser size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
+                                  <span className="truncate">{row['Entered By'] || 'N/A'}</span>
+                                </div>
+                                <span className="mx-1.5 opacity-20">•</span>
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <IconClock size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
+                                  <span className="truncate">{row['Entered Time'] || 'N/A'}</span>
+                                </div>
+                                <span className="mx-1.5 opacity-20">•</span>
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <IconCalendar size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
+                                  <span className="truncate">{row['PO Date'] || 'N/A'}</span>
+                                </div>
+                              </div>
                             )}
                           </div>
-
-                          <div className="flex items-center justify-between pt-2">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDetailedModal(row);
-                              }}
-                              className="px-4 py-2 bg-[#F59E0B] text-black hover:bg-[#D97706] rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5"
-                            >
-                              <IconEye size={12} />
-                              View Full Report
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Bottom Footer Muted text */}
-                      {!isExpanded && (
-                        <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between border-t border-[rgba(255,255,255,0.04)] pt-3 text-[10px] text-[rgba(255,255,255,0.35)] font-bold truncate">
-                          <div className="flex items-center gap-1.5 truncate">
-                            <IconUser size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
-                            <span className="truncate">{row['Entered By'] || 'N/A'}</span>
-                          </div>
-                          <span className="mx-1.5 opacity-20">•</span>
-                          <div className="flex items-center gap-1.5 truncate">
-                            <IconClock size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
-                            <span className="truncate">{row['Entered Time'] || 'N/A'}</span>
-                          </div>
-                          <span className="mx-1.5 opacity-20">•</span>
-                          <div className="flex items-center gap-1.5 truncate">
-                            <IconHash size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
-                            <span className="truncate">{row['Req Ref'] || 'N/A'}</span>
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                ));
+              })()}
 
               {/* Dynamic Load More Action Bar */}
               {displayCount < filteredLog.length && (
