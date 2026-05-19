@@ -184,7 +184,7 @@ const App = () => {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-[13px] font-medium text-[rgba(255,255,255,0.8)] truncate">
-                Taslim Mukim
+                Taslim
               </span>
               <span className="text-[11px] text-[rgba(255,255,255,0.4)] truncate">
                 Admin Account
