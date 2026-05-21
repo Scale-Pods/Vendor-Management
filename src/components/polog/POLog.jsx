@@ -321,7 +321,7 @@ const POLog = () => {
   const [materialRows, setMaterialRows] = useState([]);
   const [materialDetailRows, setMaterialDetailRows] = useState([]);
   const [isComparing, setIsComparing] = useState(false);
-  const [comparisonModal, setComparisonModal] = useState({ show: false, prRef: null, data: [], isLive: true });
+  const [comparisonModal, setComparisonModal] = useState({ show: false, prRef: null, data: [], isLive: true, remarks: '' });
   const [comparisonCache, setComparisonCache] = useState({}); // { [prRef]: { data, isLive: boolean } }
   const comparisonLoadingRef = useRef(new Set()); // Tracks PRs currently being fetched to avoid duplicates
   const [rateSummaryMap, setRateSummaryMap] = useState({}); // { [prRef]: { subtotal, discount, charges, net, manualTotal } }
@@ -3210,7 +3210,7 @@ const POLog = () => {
 
       {/* â•â•â•â•â•â•â•â•â•â•â• COMPARISON MODAL (REDESIGNED) â•â•â•â•â•â•â•â•â•â•â• */}
       {comparisonModal.show && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 sm:p-12 w-screen h-screen left-0 top-0">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 sm:p-12" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
           <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl animate-fade-in" onClick={() => setComparisonModal({ ...comparisonModal, show: false })} />
           
           <div className="relative w-full max-w-7xl max-h-[92vh] bg-[#080c14] rounded-[40px] border border-[rgba(245,158,11,0.15)] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-zoom-in">
@@ -3402,7 +3402,20 @@ const POLog = () => {
                     <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{comparisonModal.data.filter(r => r.status === 'MISSING').length} Removed</span>
                   </div>
                </div>
-               <div className="flex items-center gap-4">
+
+               {/* Remarks Section */}
+               <div className="mt-8 pt-8 border-t border-[rgba(245,158,11,0.05)]">
+                  <label className="block text-xs font-black text-white/60 uppercase tracking-widest mb-3">Add Remarks (Optional)</label>
+                  <textarea
+                    value={comparisonModal.remarks}
+                    onChange={(e) => setComparisonModal({ ...comparisonModal, remarks: e.target.value })}
+                    placeholder="Enter any additional notes or remarks about this reconciliation..."
+                    className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#F59E0B]/50 focus:bg-white/[0.08] transition-all resize-none"
+                    rows={4}
+                  />
+               </div>
+
+               <div className="flex items-center gap-4 mt-8">
                   <button 
                     onClick={() => setComparisonModal({ ...comparisonModal, show: false })}
                     className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-3xl text-xs font-black uppercase tracking-widest transition-all"
@@ -3410,9 +3423,32 @@ const POLog = () => {
                     Discard Changes
                   </button>
                   <button 
-                    onClick={() => {
-                      setComparisonModal({ ...comparisonModal, show: false });
-                      setToast({ message: "Comparison verified. Changes accepted.", type: "success" });
+                    onClick={async () => {
+                      try {
+                        const payload = {
+                          prRef: comparisonModal.prRef,
+                          data: comparisonModal.data,
+                          remarks: comparisonModal.remarks,
+                          timestamp: new Date().toISOString(),
+                          isLive: comparisonModal.isLive
+                        };
+                        
+                        const response = await fetch(COMPARE_WEBHOOK, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(payload)
+                        });
+                        
+                        if (response.ok) {
+                          setComparisonModal({ show: false, prRef: null, data: [], isLive: true, remarks: '' });
+                          setToast({ message: "Reconciliation applied successfully with remarks.", type: "success" });
+                        } else {
+                          setToast({ message: "Failed to apply reconciliation.", type: "error" });
+                        }
+                      } catch (error) {
+                        console.error("[v0] Reconciliation error:", error);
+                        setToast({ message: "Error applying reconciliation.", type: "error" });
+                      }
                     }}
                     className="px-10 py-4 bg-gradient-to-r from-[#F59E0B] to-[#D97706] text-black shadow-[0_20px_40px_rgba(245,158,11,0.2)] rounded-3xl text-xs font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]"
                   >
