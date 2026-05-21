@@ -1,24 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  IconLayoutDashboard, 
-  IconUpload, 
-  IconFileInvoice, 
-  IconGitCompare, 
-  IconBuildingStore, 
-  IconChartDots,
-  IconSun,
-  IconMoon,
-  IconSearch,
   IconBell,
   IconTable,
   IconClipboardList,
   IconClipboardCheck,
   IconCalendar,
-  IconChevronDown
+  IconChevronDown,
+  IconLogout,
+  IconUsers,
+  IconShieldLock
 } from '@tabler/icons-react';
-import Overview from './components/dashboard/Overview';
 import VendorAnalysis from './components/vendors/VendorAnalysis';
-import FileUploader from './components/upload/FileUploader';
 import PRTable from './components/records/PRTable';
 import InsightsPanel from './components/insights/InsightsPanel';
 import Sheets from './components/sheets/Sheets';
@@ -26,20 +18,55 @@ import POLog from './components/polog/POLog';
 import ReviewYear from './components/dashboard/ReviewYear';
 import ReviewDashboard from './components/dashboard/ReviewDashboard';
 import { SearchBar } from './components/ui/search-bar';
+import Login from './components/auth/Login';
+import UserManagement from './components/admin/UserManagement';
 
 const SIDEBAR_W = 260;
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('scale_pods_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [activeTab, setActiveTab] = useState('polog');
   const [selectedPR, setSelectedPR] = useState(null);
+
+  // Diagnostic logging to track role changes
+  useEffect(() => {
+    if (user) {
+      console.log('Current Auth State:', {
+        email: user.email,
+        role: user.role,
+        isAdmin: user.role === 'admin'
+      });
+    }
+  }, [user]);
+
+  const handleLogin = (userData) => {
+    console.log('Login event triggered with data:', userData);
+    setUser(userData);
+    localStorage.setItem('scale_pods_user', JSON.stringify(userData));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('scale_pods_user');
+  };
 
   const handleSelectPR = (pr) => {
     setSelectedPR(pr);
-    setActiveTab('dashboard');
+    setActiveTab('polog');
   };
 
+  const isViewer = user?.role === 'viewer';
+  const isAdmin = user?.role === 'admin';
+
   const mainNav = [
-    { id: 'dashboard', label: 'Dashboard', icon: IconLayoutDashboard },
+    { id: 'polog', label: 'Dashboard', icon: IconClipboardList },
+  ];
+
+  const adminNav = [
+    { id: 'users', label: 'User Management', icon: IconUsers },
   ];
 
   const reviewNav = [
@@ -54,16 +81,17 @@ const App = () => {
     }
   ];
 
-
   const dataNav = [
-    { id: 'sheets', label: 'Sheets', icon: IconTable },
-    { id: 'polog', label: 'Material List', icon: IconClipboardList },
+    { id: 'sheets', label: 'Sheets', icon: IconTable, restricted: true },
   ];
 
   const [isReviewExpanded, setIsReviewExpanded] = useState(false);
 
   const NavItem = ({ item, isSubItem, hasChildren, isExpanded, onExpand }) => {
     const isActive = activeTab === item.id;
+    // Hide restricted items for viewers
+    if (isViewer && item.restricted) return null;
+
     return (
       <div>
         <button
@@ -108,6 +136,10 @@ const App = () => {
       </div>
     );
   };
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   return (
     <div className="flex min-h-screen bg-[#06090F] relative overflow-hidden">
@@ -163,7 +195,6 @@ const App = () => {
             ))}
           </nav>
 
-
           {/* DATA group */}
           <div className="px-2 pt-6 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">
             DATA
@@ -175,21 +206,51 @@ const App = () => {
 
         {/* Bottom Section */}
         <div className="px-3 py-6 border-t border-[rgba(255,255,255,0.08)] space-y-4">
+          {/* Admin Tools - Quick Access */}
+          {isAdmin && (
+            <div className="pb-2 border-b border-[rgba(255,255,255,0.05)]">
+              <nav className="space-y-[2px]">
+                {adminNav.map((item) => <NavItem key={item.id} item={item} />)}
+              </nav>
+            </div>
+          )}
+
           {/* User row */}
-          <div className="flex items-center gap-3 px-2 py-1">
-            <div className="relative">
-              <div className="w-9 h-9 rounded-full bg-[rgba(255,255,255,0.05)] border-2 border-[#F59E0B] shadow-[0_0_12px_rgba(245,158,11,0.3)] flex items-center justify-center text-xs font-bold text-[#F59E0B]">
-                TM
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className={`w-9 h-9 rounded-full bg-[rgba(255,255,255,0.05)] border-2 ${
+                  isAdmin ? 'border-[#F59E0B] shadow-[0_0_12px_rgba(245,158,11,0.3)]' : 
+                  user.role === 'editor' ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : 
+                  'border-[rgba(255,255,255,0.1)]'
+                } flex items-center justify-center text-xs font-bold ${
+                  isAdmin ? 'text-[#F59E0B]' : 
+                  user.role === 'editor' ? 'text-blue-400' : 
+                  'text-[rgba(255,255,255,0.4)]'
+                }`}>
+                  {isAdmin ? <IconShieldLock size={16} /> : (user.email?.charAt(0).toUpperCase() || 'U')}
+                </div>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[13px] font-medium text-[rgba(255,255,255,0.8)] truncate">
+                  {user.email?.split('@')[0]}
+                </span>
+                <span className={`text-[10px] ${
+                  isAdmin ? 'text-[#F59E0B]' : 
+                  user.role === 'editor' ? 'text-blue-400' : 
+                  'text-[rgba(255,255,255,0.3)]'
+                } font-black uppercase tracking-[0.1em] truncate`}>
+                  {user.role}
+                </span>
               </div>
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-[13px] font-medium text-[rgba(255,255,255,0.8)] truncate">
-                Taslim
-              </span>
-              <span className="text-[11px] text-[rgba(255,255,255,0.4)] truncate">
-                Admin Account
-              </span>
-            </div>
+            <button 
+              onClick={handleLogout}
+              className="p-2 text-label hover:text-white transition-colors"
+              title="Logout"
+            >
+              <IconLogout size={18} />
+            </button>
           </div>
         </div>
       </aside>
@@ -215,7 +276,8 @@ const App = () => {
 
         {/* Dynamic Content */}
         <div className={activeTab === 'sheets' || activeTab === 'polog' ? "flex-1 w-full overflow-hidden" : "p-8 w-full overflow-y-auto"}>
-          {activeTab === 'dashboard' && <Overview darkMode={true} initialPR={selectedPR} />}
+          {activeTab === 'polog' && <POLog initialPR={selectedPR} />}
+          {activeTab === 'users' && isAdmin && <UserManagement />}
           {activeTab === 'review-group' && <ReviewDashboard />}
           {activeTab === 'review2025' && <ReviewYear year="2025" action="25" onSelectPR={handleSelectPR} />}
           {activeTab === 'review2026' && <ReviewYear year="2026" action="26" onSelectPR={handleSelectPR} />}
@@ -223,13 +285,14 @@ const App = () => {
           {activeTab === 'changes' && <PRTable showChangesOnly={true} />}
           {activeTab === 'vendors' && <VendorAnalysis />}
           {activeTab === 'insights' && <InsightsPanel />}
-          {activeTab === 'sheets' && <Sheets darkMode={true} />}
+          {/* Force redirect if viewer somehow attempts to access sheets */}
+          {activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
+          {activeTab === 'sheets' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Sheets.</div>}
           {activeTab === 'polog' && <POLog />}
         </div>
       </main>
     </div>
   );
 };
-
 
 export default App;

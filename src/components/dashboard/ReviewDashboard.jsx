@@ -1,207 +1,546 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { IconShieldCheck, IconAlertTriangle, IconRefresh, IconTrendingDown, IconClock } from '@tabler/icons-react';
-import { processPRItems } from '../../utils/prUtils';
+import { 
+  IconClipboardList, IconListCheck, IconTrendingUp, IconTrendingDown, 
+  IconUsers, IconLayoutDashboard, IconArrowUpRight, IconArrowDownRight,
+  IconFilter, IconRefresh, IconAlertTriangle
+} from '@tabler/icons-react';
+import { supabase } from '../../lib/supabase';
+import { SearchBar } from '../ui/search-bar';
 
-const StatCard = ({ title, value, subtitle, icon: Icon, colorClass, delay }) => (
-  <div className={`glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] relative overflow-hidden stagger-item`} style={{ animationDelay: `${delay}ms` }}>
-    <div className={`absolute -top-10 -right-10 w-24 h-24 rounded-full blur-2xl opacity-20 ${colorClass}`}></div>
-    <div className="flex justify-between items-start mb-4 relative z-10">
-      <div>
-        <p className="text-[10px] font-black text-[rgba(255,255,255,0.4)] uppercase tracking-widest mb-1">{title}</p>
-        <h3 className="text-3xl font-black text-white">{value}</h3>
+/* ─── Styles & Theme Constants ─── */
+const COLORS = {
+  gold: '#c8922a',
+  green: '#00c896',
+  red: '#ff4d4d',
+  amber: '#f59e0b',
+  text: 'rgba(255,255,255,0.4)',
+  border: 'rgba(255,255,255,0.08)',
+  cardBg: 'rgba(13, 17, 23, 0.6)'
+};
+
+/* ─── Shared UI Components ─── */
+const Skeleton = ({ className }) => (
+  <div className={`animate-pulse bg-white/5 rounded-md ${className}`} />
+);
+
+const KPIStore = ({ title, value, icon: Icon, color, trend, loading }) => (
+  <div className="glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative flex flex-col justify-between min-h-[140px] hover:border-[rgba(255,255,255,0.15)] transition-all">
+    <div className="flex justify-between items-start">
+      <div className="p-2.5 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]" style={{ color }}>
+        <Icon size={20} stroke={2} />
       </div>
-      <div className={`p-3 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.05)] ${colorClass.replace('bg-', 'text-')}`}>
-        <Icon size={20} />
-      </div>
+      {trend !== undefined && !loading && (
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${trend >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+          {trend >= 0 ? <IconArrowUpRight size={10} /> : <IconArrowDownRight size={10} />}
+          {Math.abs(trend)}%
+        </span>
+      )}
     </div>
-    <div className="text-xs text-[rgba(255,255,255,0.4)] relative z-10 flex items-center gap-1">
-      {subtitle}
+    <div className="mt-4">
+      {loading ? (
+        <Skeleton className="h-8 w-24 mb-2" />
+      ) : (
+        <h3 className="text-2xl font-black text-white tracking-tight">{value}</h3>
+      )}
+      <p className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">{title}</p>
+    </div>
+  </div>
+);
+
+const CurrencyKPI = ({ title, value, icon: Icon, color, loading }) => (
+  <div className="glass-panel p-4 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative group hover:border-[rgba(255,255,255,0.15)] transition-all">
+    <div className="flex items-center gap-4">
+      <div className="p-3 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}10`, color }}>
+        <Icon size={24} stroke={2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[9px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest mb-0.5 whitespace-nowrap">{title}</p>
+        {loading ? (
+          <Skeleton className="h-7 w-3/4" />
+        ) : (
+          <h3 className="text-xl font-black text-white truncate">AED {Number(value || 0).toLocaleString()}</h3>
+        )}
+      </div>
     </div>
   </div>
 );
 
 const ReviewDashboard = () => {
-  const [stats, setStats] = useState({
-    totalAudited: 0,
-    totalPending: 0,
-    savings: 0,
-    flags: 0,
-    auditData: [
-      { name: 'Audited', value: 30, color: '#10B981' },
-      { name: 'Pending', value: 70, color: '#F59E0B' }
-    ],
-    savingsTrend: []
-  });
+  const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ project: '', supplier: '', search: '' });
 
+  /* ─── Data Fetching ─── */
   useEffect(() => {
-    const fetchAuditStats = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
+        // 1. Try Supabase first
+        const { data: sbData, error: sbError } = await supabase
+          .from('purchase_orders')
+          .select('*');
+        
+        if (!sbError && sbData && sbData.length > 0) {
+          setRawData(sbData);
+          return;
+        }
+
+        // 2. Fallback to n8n if Supabase is empty/not configured
+        console.log('Supabase empty or missing, falling back to n8n...');
+        const n8nUrl = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO%20Data`;
+        const response = await fetch(n8nUrl);
         const json = await response.json();
-        const rawItems = Array.isArray(json) ? (json[0]?.data || json) : (json?.data || []);
         
-        const processed = processPRItems(rawItems);
+        // Extract data array from n8n response
+        const n8nData = Array.isArray(json) ? (json[0]?.data || json) : (json.data || []);
         
-        const auditedCount = processed.filter(i => i._verification && i._verification.status !== 'pending').length;
-        const pendingCount = processed.length - auditedCount;
-        
-        // Calculate savings based on changes
-        let totalSavings = 0;
-        let flagged = 0;
-        processed.forEach(i => {
-          if (i._hasChanges) {
-            const original = parseFloat(i._original?.total || 0);
-            const latest = parseFloat(i._latest?.total || 0);
-            if (latest < original) {
-              totalSavings += (original - latest);
-            }
-            if (latest > original * 1.2) { // 20% increase
-              flagged++;
-            }
-          }
-        });
+        // Map n8n fields to internal dashboard fields
+        const mappedData = n8nData.map(item => ({
+          ...item,
+          PR: item['Req Ref'] || item.Ref || 'N/A',
+          Description: item.Description || item.Ref || 'No Description',
+          Project: item.Project || 'Unknown',
+          Supplier: item.Supplier || 'Unknown',
+          change1_total: parseFloat(String(item['Original Pirce'] || item['Net Price'] || 0).replace(/,/g, '')),
+          change2_total: item.change_in_price_1 || null,
+          change3_total: item.change_in_price_2 || null,
+          change4_total: item.change_in_price_3 || null,
+          change5_total: item.change_in_price_4 || null,
+          change6_total: item.change_in_price_5 || null,
+          // Support standard changeN_total format if redirected from supabase
+          ...item 
+        }));
 
-        // Mock trend for visual appeal using real totals as a baseline if possible
-        const mockTrend = [
-          { month: 'Jan', savings: totalSavings * 0.1 || 12000 },
-          { month: 'Feb', savings: totalSavings * 0.2 || 15000 },
-          { month: 'Mar', savings: totalSavings * 0.15 || 22000 },
-          { month: 'Apr', savings: totalSavings * 0.3 || 31000 },
-          { month: 'May', savings: totalSavings * 0.25 || 45000 },
-        ];
-
-        setStats({
-          totalAudited: auditedCount || 120, // Fallbacks for visual presence
-          totalPending: pendingCount || 450,
-          savings: totalSavings || 125000,
-          flags: flagged || 14,
-          auditData: [
-            { name: 'Audited', value: auditedCount || 120, color: '#10B981' },
-            { name: 'Pending', value: pendingCount || 450, color: '#F59E0B' }
-          ],
-          savingsTrend: mockTrend
-        });
+        setRawData(mappedData);
       } catch (err) {
-        console.error('Failed to load audit stats', err);
+        console.error('Failed to load dashboard data', err);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchAuditStats();
+    fetchData();
   }, []);
 
+  /* ─── Helper: Get Latest Total ─── */
+  const getLatestTotal = (item) => {
+    // Check internal mapped fields or standard changeN fields
+    for (let i = 20; i >= 2; i--) {
+      const val = item[`change${i}_total`] || item[`change_in_price_${i-1}`];
+      if (val !== null && val !== undefined && val !== '') {
+        return parseFloat(String(val).replace(/,/g, ''));
+      }
+    }
+    return parseFloat(String(item.change1_total || item['Net Price'] || 0).replace(/,/g, ''));
+  };
+
+  const getOriginalTotal = (item) => {
+    return parseFloat(String(item.change1_total || 0).replace(/,/g, ''));
+  };
+
+  /* ─── Filter Logic ─── */
+  const filteredData = useMemo(() => {
+    return rawData.filter(item => {
+      const matchProject = !filters.project || item.Project === filters.project;
+      const matchSupplier = !filters.supplier || item.Supplier === filters.supplier;
+      
+      const searchStr = filters.search.toLowerCase();
+      const matchSearch = !filters.search || 
+        (item.PR && String(item.PR).toLowerCase().includes(searchStr)) ||
+        (item.Project && String(item.Project).toLowerCase().includes(searchStr)) ||
+        (item.Supplier && String(item.Supplier).toLowerCase().includes(searchStr));
+
+      return matchProject && matchSupplier && matchSearch;
+    });
+  }, [rawData, filters]);
+
+  /* ─── Derived Stats ─── */
+  const stats = useMemo(() => {
+    if (loading) return null;
+
+    const prs = new Set(filteredData.map(i => i.PR || i.PR_No)).size;
+    const itemsWithChanges = filteredData.filter(i => i.change2_total !== null && i.change2_total !== '').length;
+    const itemsWithMultiple = filteredData.filter(i => i.change3_total !== null && i.change3_total !== '').length;
+
+    let totalOriginal = 0;
+    let totalLatest = 0;
+    let totalSavings = 0;
+    let totalIncreases = 0;
+
+    filteredData.forEach(i => {
+      const orig = getOriginalTotal(i);
+      const lat = getLatestTotal(i);
+      
+      totalOriginal += orig;
+      totalLatest += lat;
+
+      if (lat < orig) totalSavings += (orig - lat);
+      if (lat > orig) totalIncreases += (lat - orig);
+    });
+
+    return {
+      totalPRs: prs,
+      totalItems: filteredData.length,
+      itemsWithChanges,
+      itemsWithMultiple,
+      totalOriginal,
+      totalLatest,
+      totalSavings,
+      totalIncreases
+    };
+  }, [filteredData, loading]);
+
+  /* ─── Chart Data Processing ─── */
+  const chartData = useMemo(() => {
+    if (loading) return { projectData: [], distributionData: [], supplierData: [] };
+
+    // 1. Savings vs Increases by Project
+    const projMap = {};
+    filteredData.forEach(i => {
+      const p = i.Project || 'Unknown';
+      if (!projMap[p]) projMap[p] = { project: p, savings: 0, increases: 0 };
+      
+      const orig = getOriginalTotal(i);
+      const lat = getLatestTotal(i);
+      if (lat < orig) projMap[p].savings += (orig - lat);
+      if (lat > orig) projMap[p].increases += (lat - orig);
+    });
+    const projectData = Object.values(projMap)
+      .filter(p => p.savings > 0 || p.increases > 0)
+      .sort((a,b) => (b.savings + b.increases) - (a.savings + a.increases));
+
+    // 2. Price Change Distribution
+    const noChange = filteredData.filter(i => !i.change2_total).length;
+    const oneChange = filteredData.filter(i => i.change2_total && !i.change3_total).length;
+    const twoChanges = filteredData.filter(i => i.change3_total && !i.change4_total).length;
+    const threePlusChanges = filteredData.filter(i => i.change4_total).length;
+
+    const distributionData = [
+      { name: 'No Change', value: noChange },
+      { name: '1 Change', value: oneChange },
+      { name: '2 Changes', value: twoChanges },
+      { name: '3+ Changes', value: threePlusChanges }
+    ].filter(d => d.value > 0);
+
+    // 3. Top 10 Suppliers by Total Value
+    const suppMap = {};
+    filteredData.forEach(i => {
+      const s = i.Supplier || 'Unknown';
+      suppMap[s] = (suppMap[s] || 0) + getLatestTotal(i);
+    });
+    const supplierData = Object.entries(suppMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    return { projectData, distributionData, supplierData };
+  }, [filteredData, loading]);
+
+  /* ─── Top Increases Table Data ─── */
+  const topIncreases = useMemo(() => {
+    return filteredData
+      .filter(i => {
+        const orig = getOriginalTotal(i);
+        const lat = getLatestTotal(i);
+        return orig > 0 && lat > orig;
+      })
+      .map(i => {
+        const orig = getOriginalTotal(i);
+        const lat = getLatestTotal(i);
+        const diffPercent = ((lat - orig) / orig) * 100;
+        return { ...i, orig, lat, diffPercent };
+      })
+      .sort((a, b) => b.diffPercent - a.diffPercent)
+      .slice(0, 20);
+  }, [filteredData]);
+
+  /* ─── Options for Dropdowns ─── */
+  const projectList = useMemo(() => [...new Set(rawData.map(i => i.Project))].filter(Boolean).sort(), [rawData]);
+  const supplierList = useMemo(() => [...new Set(rawData.map(i => i.Supplier))].filter(Boolean).sort(), [rawData]);
+
   return (
-    <div className="w-full h-full text-white">
-      <div className="mb-10">
-        <h2 className="text-3xl font-black tracking-tight flex items-center gap-3">
-          Audit & Review Center
-        </h2>
-        <p className="text-[rgba(255,255,255,0.4)] mt-2 text-sm max-w-2xl">
-          Comprehensive overview of verification cycles, identified savings, and pending reviews.
-        </p>
-      </div>
+    <div className="w-full h-full text-white bg-[#0d1117] min-h-screen px-4 md:px-8 py-6">
+      {/* Header & Filters */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-8 gap-6">
+        <div>
+          <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
+            <IconLayoutDashboard className="text-[#c8922a]" size={32} />
+            Audit & Review Center
+          </h2>
+          <p className="text-[rgba(255,255,255,0.4)] text-sm font-medium mt-1">
+            Real-time financial discrepancy analysis and PR optimization tracking.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 relative">
-        {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/10 backdrop-blur-[2px] rounded-2xl">
-            <IconRefresh className="w-6 h-6 text-[#F59E0B] animate-spin" />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* PR Search */}
+          <div className="w-full sm:w-64">
+            <SearchBar 
+              placeholder="Search PR or Supplier..." 
+              value={filters.search}
+              onChange={(val) => setFilters(prev => ({ ...prev, search: val }))}
+            />
           </div>
-        )}
-        <StatCard 
-          title="Total Audited" 
-          value={stats.totalAudited} 
-          subtitle="Records verified across cycles"
-          icon={IconShieldCheck}
-          colorClass="bg-green-500 text-green-400"
-          delay={0}
-        />
-        <StatCard 
-          title="Pending Review" 
-          value={stats.totalPending} 
-          subtitle="Awaiting manual verification"
-          icon={IconClock}
-          colorClass="bg-yellow-500 text-yellow-400"
-          delay={100}
-        />
-        <StatCard 
-          title="Savings Identified" 
-          value={`AED ${(stats.savings / 1000).toFixed(1)}K`} 
-          subtitle="Through audit process"
-          icon={IconTrendingDown}
-          colorClass="bg-blue-500 text-blue-400"
-          delay={200}
-        />
-        <StatCard 
-          title="Flagged Items" 
-          value={stats.flags} 
-          subtitle="High variance records"
-          icon={IconAlertTriangle}
-          colorClass="bg-red-500 text-red-400"
-          delay={300}
-        />
+
+          <div className="relative group">
+            <IconFilter className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.2)] group-focus-within:text-[#c8922a] transition-colors" size={16} />
+            <select 
+              className="bg-[#1a1f2e] border border-[rgba(255,255,255,0.08)] text-[13px] text-[rgba(255,255,255,0.8)] rounded-xl pl-10 pr-10 py-2.5 outline-none focus:border-[#c8922a] transition-all min-w-[220px] appearance-none cursor-pointer"
+              value={filters.project}
+              onChange={(e) => setFilters(f => ({ ...f, project: e.target.value }))}
+            >
+              <option value="">All Projects</option>
+              {projectList.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <IconArrowDownRight size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.2)] pointer-events-none" />
+          </div>
+
+          <div className="relative group">
+            <IconUsers className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.2)] group-focus-within:text-[#c8922a] transition-colors" size={16} />
+            <select 
+              className="bg-[#1a1f2e] border border-[rgba(255,255,255,0.08)] text-[13px] text-[rgba(255,255,255,0.8)] rounded-xl pl-10 pr-10 py-2.5 outline-none focus:border-[#c8922a] transition-all min-w-[220px] appearance-none cursor-pointer"
+              value={filters.supplier}
+              onChange={(e) => setFilters(f => ({ ...f, supplier: e.target.value }))}
+            >
+              <option value="">All Suppliers</option>
+              {supplierList.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <IconArrowDownRight size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.2)] pointer-events-none" />
+          </div>
+          
+          <button 
+            onClick={() => window.location.reload()}
+            className="p-2.5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.06)] transition-all"
+          >
+            <IconRefresh size={20} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 glass-panel p-8 stagger-item" style={{ animationDelay: '400ms' }}>
-          <h3 className="text-lg font-bold text-white mb-8">Savings Trend</h3>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.savingsTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorSavings" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="month" stroke="rgba(255,255,255,0.2)" tick={{fill: 'rgba(255,255,255,0.4)', fontSize: 10}} tickLine={false} axisLine={false} dy={10} />
-                <YAxis stroke="rgba(255,255,255,0.2)" tick={{fill: 'rgba(255,255,255,0.4)', fontSize: 10}} tickLine={false} axisLine={false} tickFormatter={(val) => `AED ${val/1000}k`} />
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: 'rgba(6,9,15,0.95)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', backdropFilter: 'blur(10px)' }}
-                  itemStyle={{ color: '#10B981', fontWeight: 'bold' }}
-                />
-                <Area type="monotone" dataKey="savings" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorSavings)" />
-              </AreaChart>
-            </ResponsiveContainer>
+      {/* Row 1 KPI */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-5">
+        <KPIStore title="Total PRs" value={stats?.totalPRs || 0} icon={IconClipboardList} color={COLORS.gold} loading={loading} />
+        <KPIStore title="Total Line Items" value={stats?.totalItems || 0} icon={IconListCheck} color="#3b82f6" loading={loading} />
+        <KPIStore title="Items with Price Changes" value={stats?.itemsWithChanges || 0} icon={IconTrendingUp} color={COLORS.amber} loading={loading} />
+        <KPIStore title="Items with Multiple Changes" value={stats?.itemsWithMultiple || 0} icon={IconRefresh} color="#a855f7" loading={loading} />
+      </div>
+
+      {/* Row 2 Currency KPI */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <CurrencyKPI title="Total Original Value" value={stats?.totalOriginal || 0} icon={IconListCheck} color="rgba(255,255,255,0.4)" loading={loading} />
+        <CurrencyKPI title="Total Latest Value" value={stats?.totalLatest || 0} icon={IconTrendingUp} color={COLORS.gold} loading={loading} />
+        <CurrencyKPI title="Total Savings" value={stats?.totalSavings || 0} icon={IconTrendingDown} color={COLORS.green} loading={loading} />
+        <CurrencyKPI title="Total Increases" value={stats?.totalIncreases || 0} icon={IconTrendingUp} color={COLORS.red} loading={loading} />
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+        {/* Savings vs Increases by Project */}
+        <div className="lg:col-span-8 glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Savings vs Increases by Project</h3>
+            <div className="flex gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.green }} />
+                <span className="text-[10px] text-white/40 font-bold uppercase">Savings</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.red }} />
+                <span className="text-[10px] text-white/40 font-bold uppercase">Increases</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-[400px]">
+            {loading ? (
+              <Skeleton className="w-full h-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData.projectData} layout="vertical" margin={{ left: 60, right: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" horizontal={false} />
+                  <XAxis type="number" stroke={COLORS.text} fontSize={10} axisLine={false} tickFormatter={v => `AED ${v >= 1000 ? (v/1000).toFixed(1) + 'k' : v}`} />
+                  <YAxis dataKey="project" type="category" stroke={COLORS.text} fontSize={10} axisLine={false} width={120} tick={{ fill: 'rgba(255,255,255,0.6)' }} />
+                  <RechartsTooltip 
+                    cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                    contentStyle={{ backgroundColor: '#1a1f2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+                    labelStyle={{ color: 'white', fontWeight: 'bold', marginBottom: '8px', fontSize: '12px' }}
+                    itemStyle={{ fontSize: '11px', padding: '4px 0' }}
+                    formatter={(v) => [`AED ${v.toLocaleString()}`, '']}
+                  />
+                  <Bar dataKey="savings" name="Savings" fill={COLORS.green} radius={[0, 4, 4, 0]} barSize={14} />
+                  <Bar dataKey="increases" name="Increases" fill={COLORS.red} radius={[0, 4, 4, 0]} barSize={14} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
-        <div className="glass-panel p-8 stagger-item" style={{ animationDelay: '500ms' }}>
-          <h3 className="text-lg font-bold text-white mb-8">Audit Progress</h3>
-          <div className="h-[350px] w-full flex flex-col items-center justify-center">
-            <PieChart width={300} height={250}>
-              <Pie 
-                data={stats.auditData} 
-                cx="50%" 
-                cy="45%" 
-                innerRadius={70} 
-                outerRadius={90} 
-                paddingAngle={5} 
-                dataKey="value" 
-                stroke="none"
-              >
-                {stats.auditData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} cornerRadius={8} />
-                ))}
-              </Pie>
-              <RechartsTooltip 
-                contentStyle={{ backgroundColor: 'rgba(6,9,15,0.95)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}
-                itemStyle={{ color: '#fff' }}
-              />
-              <Legend 
-                verticalAlign="bottom" 
-                align="center" 
-                iconType="circle"
-                wrapperStyle={{ paddingTop: '20px' }}
-                formatter={(value) => <span className="text-[10px] font-black uppercase tracking-widest text-[rgba(255,255,255,0.4)] ml-2">{value}</span>}
-              />
-            </PieChart>
+        {/* Price Change Distribution */}
+        <div className="lg:col-span-4 glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] flex flex-col">
+          <h3 className="text-sm font-bold text-white mb-6 uppercase tracking-wider text-center">Price Change Distribution</h3>
+          <div className="flex-1 min-h-[300px]">
+            {loading ? (
+              <Skeleton className="w-full h-full rounded-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie 
+                    data={chartData.distributionData} 
+                    innerRadius="65%" 
+                    outerRadius="85%" 
+                    paddingAngle={5} 
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {chartData.distributionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={[ '#1e293b', COLORS.gold, COLORS.amber, COLORS.red ][index % 4]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip 
+                    contentStyle={{ backgroundColor: '#1a1f2e', border: 'none', borderRadius: '12px', fontSize: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+                    itemStyle={{ color: 'white' }}
+                  />
+                  <Legend layout="horizontal" verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.05)] text-center">
+            <p className="text-[10px] text-[rgba(255,255,255,0.3)] uppercase font-bold tracking-[0.2em]">Total Processed Items</p>
+            <h4 className="text-3xl font-black text-white mt-1">{stats?.totalItems || 0}</h4>
+          </div>
+        </div>
+
+        {/* Top 10 Suppliers */}
+        <div className="lg:col-span-12 glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)]">
+          <h3 className="text-sm font-bold text-white mb-8 uppercase tracking-wider">Top 10 Suppliers by Total Spend</h3>
+          <div className="h-[400px]">
+            {loading ? (
+              <Skeleton className="w-full h-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData.supplierData} layout="vertical" margin={{ left: 40, right: 80 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" stroke={COLORS.text} fontSize={11} width={180} axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.8)', fontWeight: 600 }} />
+                  <Bar dataKey="value" fill={COLORS.gold} radius={[0, 6, 6, 0]} barSize={24}>
+                    {chartData.supplierData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fillOpacity={1 - (index * 0.07)} />
+                    ))}
+                  </Bar>
+                  <RechartsTooltip 
+                    cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                    contentStyle={{ backgroundColor: '#1a1f2e', border: 'none', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+                    itemStyle={{ color: 'white', fontWeight: 'bold' }}
+                    labelStyle={{ display: 'none' }}
+                    formatter={(v) => [`AED ${v.toLocaleString()}`, 'Total Value']}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Top Increases Table */}
+      <div className="pb-10">
+        <div className="glass-panel border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] overflow-hidden">
+          <div className="p-6 border-b border-[rgba(255,255,255,0.05)] flex items-center justify-between bg-[rgba(255,255,255,0.02)]">
+            <div>
+              <h3 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <IconAlertTriangle className="text-red-500" size={18} />
+                High Price Variance Items
+              </h3>
+              <p className="text-[10px] text-[rgba(255,255,255,0.3)] font-black uppercase mt-1 tracking-widest">Top 20 items prioritize by percentage increase</p>
+            </div>
+            <div className="hidden sm:flex gap-3">
+              <div className="flex items-center gap-1.5 text-[9px] font-black text-red-500 uppercase px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-full">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Critical (&gt;20%)
+              </div>
+              <div className="flex items-center gap-1.5 text-[9px] font-black text-amber-500 uppercase px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Caution (5-20%)
+              </div>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="p-6 space-y-4">
+                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[rgba(255,255,255,0.015)]">
+                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] w-32">PR / Sr</th>
+                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em]">Item Description</th>
+                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] w-48">Supplier</th>
+                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-right w-36">Original</th>
+                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-right w-36">Latest</th>
+                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-center w-32">Change %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(255,255,255,0.03)]">
+                  {topIncreases.map((item, idx) => (
+                    <tr 
+                      key={idx} 
+                      className={`transition-colors group ${
+                        item.diffPercent > 20 ? 'bg-red-500/2 hover:bg-red-500/4' :
+                        item.diffPercent > 5 ? 'bg-amber-500/2 hover:bg-amber-500/4' :
+                        'hover:bg-white/2'
+                      }`}
+                    >
+                      <td className="px-6 py-5">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-white font-bold tracking-tight">{item.PR || item.PR_No}</span>
+                          <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-black uppercase tracking-tighter">Sr: {item.sr_no || item.Sr_No}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <p className="text-[rgba(255,255,255,0.8)] font-semibold line-clamp-2 max-w-md">{item.Description || item.item_description}</p>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className="text-[rgba(255,255,255,0.5)] font-medium">{item.Supplier || '—'}</span>
+                      </td>
+                      <td className="px-6 py-5 text-right tabular-nums text-[rgba(255,255,255,0.4)] font-medium">
+                        {item.orig.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-5 text-right tabular-nums text-white font-black">
+                        {item.lat.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-5 text-center">
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black tracking-tight ${
+                          item.diffPercent > 20 ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                          item.diffPercent > 5 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                          item.diffPercent < 0 ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                          'bg-white/10 text-white/40'
+                        }`}>
+                          {item.diffPercent > 0 ? <IconTrendingUp size={12} /> : item.diffPercent < 0 ? <IconTrendingDown size={12} /> : null}
+                          {item.diffPercent > 0 ? '+' : ''}{item.diffPercent.toFixed(1)}%
+                        </div>
+                        <div className="mt-1">
+                          <span className={`text-[9px] font-black uppercase tracking-widest ${
+                            item.diffPercent > 20 ? 'text-red-500' :
+                            item.diffPercent > 5 ? 'text-amber-500' :
+                            'text-green-500'
+                          }`}>
+                            {item.diffPercent > 20 ? 'High' : item.diffPercent > 5 ? 'Medium' : 'Low'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {topIncreases.length === 0 && !loading && (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-20 text-center text-white/20 font-black uppercase tracking-[0.3em]">
+                        No price variances detected
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>

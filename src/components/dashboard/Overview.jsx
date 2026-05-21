@@ -1,21 +1,15 @@
 import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend
+  PieChart, Pie, Cell, AreaChart, Area, Legend
 } from 'recharts';
 import { 
-  TrendingUp, TrendingDown, FileText, AlertTriangle, 
-  DollarSign, Activity, ShoppingCart, Search, RefreshCcw, CheckCircle2, AlertCircle, Users
+  TrendingUp, TrendingDown, FileText, 
+  DollarSign, Activity, Users
 } from 'lucide-react';
 import { 
-  IconFileSearch, 
-  IconChevronDown,
-  IconRefresh,
-  IconCheck,
-  IconX,
   IconClipboardCheck,
   IconAlertCircle,
-  IconTrash,
   IconHistory,
   IconClock,
   IconArrowsDiff,
@@ -24,9 +18,13 @@ import {
   IconUsers,
   IconActivity,
   IconTrendingUp,
-  IconTrendingDown
+  IconTrendingDown,
+  IconFilter,
+  IconRefresh,
+  IconCheck,
+  IconX
 } from '@tabler/icons-react';
-import { spendTrendData, supplierComparisonData, changeTypeData } from '../../data/mockData';
+import { spendTrendData, changeTypeData } from '../../data/mockData';
 import { processPRItems, parseClipboardData, verifyPRWithExternal } from '../../utils/prUtils';
 import { SearchBar } from '../ui/search-bar';
 
@@ -58,7 +56,7 @@ const StatCard = ({ title, value, subValue, icon: Icon, trend, trendValue, glowC
   </div>
 );
 
-const Overview = ({ darkMode, initialPR, isModalMode }) => {
+const Overview = ({ initialPR, isModalMode }) => {
   const [poNumber, setPoNumber] = useState(initialPR || '');
   const [isChecking, setIsChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
@@ -72,15 +70,104 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
   const [isVerificationMode, setIsVerificationMode] = useState(false);
   const [isAIVerifying, setIsAIVerifying] = useState(false);
 
-  const [dashboardStats, setDashboardStats] = useState({
-    totalPRs: '1,284',
-    totalSpend: 'AED 4.2M',
-    activeSuppliers: '48',
-    monthlySpend: 'AED 590K',
-    trendData: spendTrendData,
-    distributionData: changeTypeData
-  });
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [fullData, setFullData] = useState([]);
+  const [filters, setFilters] = useState({
+    year: '26', // Default to 2026
+    department: 'All',
+    supplier: 'All',
+    status: 'All'
+  });
+
+  const uniqueDepartments = React.useMemo(() => {
+    const depts = new Set(fullData.map(i => i.Department).filter(Boolean));
+    return ['All', ...Array.from(depts)];
+  }, [fullData]);
+
+  const uniqueSuppliers = React.useMemo(() => {
+    const suppliers = new Set(fullData.map(i => i.Supplier).filter(Boolean));
+    return ['All', ...Array.from(suppliers)];
+  }, [fullData]);
+
+  // Re-calculate stats when fullData or filters change
+  const dashboardStats = React.useMemo(() => {
+    if (fullData.length === 0) {
+      return {
+        totalPRs: '0',
+        totalSpend: 'AED 0',
+        activeSuppliers: '0',
+        monthlySpend: 'AED 0',
+        trendData: [],
+        distributionData: changeTypeData
+      };
+    }
+
+    let filtered = fullData;
+    if (filters.department !== 'All') {
+      filtered = filtered.filter(i => i.Department === filters.department);
+    }
+    if (filters.supplier !== 'All') {
+      filtered = filtered.filter(i => i.Supplier === filters.supplier);
+    }
+    if (filters.status !== 'All') {
+      filtered = filtered.filter(i => i.Status === filters.status);
+    }
+
+    // Stats Calculation
+    const uniquePRs = new Set(filtered.map(i => i.PR || i.PR_No)).size;
+    const totalSpendValue = filtered.reduce((acc, i) => acc + (parseFloat(i.Total) || 0), 0);
+    const uniqueSuppliersCount = new Set(filtered.map(i => i.Supplier).filter(s => s)).size;
+    
+    // Monthly Trend
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const trendMap = {};
+    filtered.forEach(item => {
+      const dateStr = item.created_at || item.Date;
+      if (dateStr) {
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+          const month = months[date.getMonth()];
+          trendMap[month] = (trendMap[month] || 0) + (parseFloat(item.Total) || 0);
+        }
+      }
+    });
+    
+    let trendData = months.filter(m => trendMap[m]).map(m => ({ month: m, value: trendMap[m] }));
+    if (trendData.length === 0) trendData = spendTrendData;
+
+    const lastMonthWithData = months.slice().reverse().find(m => trendMap[m]);
+    const latestMonthlySpend = lastMonthWithData ? trendMap[lastMonthWithData] : (totalSpendValue / 12);
+
+    // Change Distribution
+    const distribution = [
+      { name: 'Price Increase', value: 0, color: '#EF4444' },
+      { name: 'Price Decrease', value: 0, color: '#10B981' },
+      { name: 'Quantity Change', value: 0, color: '#F59E0B' },
+      { name: 'Supplier Change', value: 0, color: '#3B82F6' },
+    ];
+
+    filtered.forEach(item => {
+      if (item._hasChanges) {
+        if (item._fieldChanges.rate) {
+           const latest = parseFloat(item._latest.rate || 0);
+           const original = parseFloat(item._original.rate || 0);
+           if (latest > original) distribution[0].value++;
+           else if (latest < original) distribution[1].value++;
+        }
+        if (item._fieldChanges.qty) distribution[2].value++;
+        if (item._fieldChanges.supplier) distribution[3].value++;
+      }
+    });
+
+    return {
+      totalPRs: uniquePRs.toLocaleString(),
+      totalSpend: totalSpendValue > 1000000 ? `AED ${(totalSpendValue / 1000000).toFixed(1)}M` : `AED ${(totalSpendValue / 1000).toFixed(0)}K`,
+      activeSuppliers: uniqueSuppliersCount.toString(),
+      monthlySpend: latestMonthlySpend > 1000 ? `AED ${(latestMonthlySpend / 1000).toFixed(0)}K` : `AED ${latestMonthlySpend.toFixed(0)}`,
+      trendData,
+      distributionData: distribution.some(d => d.value > 0) ? distribution : changeTypeData
+    };
+  }, [fullData, filters]);
 
   const formatCurrency = (val) => {
     const num = parseFloat(val);
@@ -104,15 +191,17 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
     return cleaned;
   };
 
-  const handlePOCheck = async () => {
-    if (!poNumber) return;
+  const handlePOCheck = React.useCallback(async (targetPo) => {
+    const activePo = targetPo || poNumber;
+    if (!activePo) return;
+    
     setIsChecking(true);
     setError(null);
     setCheckResult(null);
     setIsVerificationMode(false);
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/813fa9e5-144b-4f95-8f31-2a5c6f064d4a?action=Check&poNumber=${poNumber}`);
+      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/813fa9e5-144b-4f95-8f31-2a5c6f064d4a?action=Check&poNumber=${activePo}`);
       if (response.ok) {
         let rawData = await response.json();
         let parsedData = rawData;
@@ -150,7 +239,7 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
             timestamp: new Date().toLocaleTimeString()
           });
           setActiveTab('materials');
-          setPoNumber('');
+          setPoNumber(activePo);
         } else {
           setError('No data found for this PR number.');
         }
@@ -163,13 +252,13 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
     } finally {
       setIsChecking(false);
     }
-  };
+  }, [poNumber]);
 
-  const fetchGlobalStats = async () => {
+  const fetchGlobalStats = React.useCallback(async () => {
     if (isModalMode) return;
     setIsLoadingStats(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
+      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${filters.year}`);
       const json = await response.json();
       let rawItems = [];
       if (Array.isArray(json)) {
@@ -179,81 +268,28 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
       }
       
       const processed = processPRItems(rawItems);
-      
-      // Stats Calculation
-      const uniquePRs = new Set(processed.map(i => i.PR || i.PR_No)).size;
-      const totalSpendValue = processed.reduce((acc, i) => acc + (parseFloat(i.Total) || 0), 0);
-      const uniqueSuppliers = new Set(processed.map(i => i.Supplier).filter(s => s)).size;
-      
-      // Monthly Trend (Heuristic using created_at)
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const trendMap = {};
-      processed.forEach(item => {
-        const dateStr = item.created_at || item.Date;
-        if (dateStr) {
-          const date = new Date(dateStr);
-          if (!isNaN(date.getTime())) {
-            const month = months[date.getMonth()];
-            trendMap[month] = (trendMap[month] || 0) + (parseFloat(item.Total) || 0);
-          }
-        }
-      });
-      
-      let trendData = months.filter(m => trendMap[m]).map(m => ({ month: m, value: trendMap[m] }));
-      if (trendData.length === 0) trendData = spendTrendData;
-
-      // Monthly Spend (Latest month with data)
-      const lastMonthWithData = months.slice().reverse().find(m => trendMap[m]);
-      const latestMonthlySpend = lastMonthWithData ? trendMap[lastMonthWithData] : (totalSpendValue / 12);
-
-      // Change Distribution
-      const distribution = [
-        { name: 'Price Increase', value: 0, color: '#E74C3C' },
-        { name: 'Price Decrease', value: 0, color: '#27AE60' },
-        { name: 'Quantity Change', value: 0, color: '#C9A020' },
-        { name: 'Supplier Change', value: 0, color: '#3498DB' },
-      ];
-
-      processed.forEach(item => {
-        if (item._hasChanges) {
-          if (item._fieldChanges.rate) {
-             const latest = parseFloat(item._latest.rate || 0);
-             const original = parseFloat(item._original.rate || 0);
-             if (latest > original) distribution[0].value++;
-             else if (latest < original) distribution[1].value++;
-          }
-          if (item._fieldChanges.qty) distribution[2].value++;
-          if (item._fieldChanges.supplier) distribution[3].value++;
-        }
-      });
-
-      setDashboardStats({
-        totalPRs: uniquePRs.toLocaleString(),
-        totalSpend: totalSpendValue > 1000000 ? `AED ${(totalSpendValue / 1000000).toFixed(1)}M` : `AED ${(totalSpendValue / 1000).toFixed(0)}K`,
-        activeSuppliers: uniqueSuppliers.toString(),
-        monthlySpend: latestMonthlySpend > 1000 ? `AED ${(latestMonthlySpend / 1000).toFixed(0)}K` : `AED ${latestMonthlySpend.toFixed(0)}`,
-        trendData,
-        distributionData: distribution.some(d => d.value > 0) ? distribution : changeTypeData
-      });
+      setFullData(processed);
     } catch (err) {
       console.error('Failed to fetch dashboard stats:', err);
     } finally {
       setIsLoadingStats(false);
     }
-  };
+  }, [isModalMode, filters.year]);
 
   React.useEffect(() => {
     if (!isModalMode) {
       fetchGlobalStats();
     }
-  }, [isModalMode]);
+  }, [isModalMode, fetchGlobalStats]);
 
+  const hasLoadedInitial = React.useRef(false);
   React.useEffect(() => {
-    if (initialPR) {
+    if (initialPR && !hasLoadedInitial.current) {
       setPoNumber(initialPR);
-      handlePOCheck();
+      handlePOCheck(initialPR);
+      hasLoadedInitial.current = true;
     }
-  }, [initialPR]);
+  }, [initialPR, handlePOCheck]);
 
   const executeVerification = async () => {
     if (!pasteContent || !checkResult) return;
@@ -524,7 +560,7 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
   }, [isVerificationMode, checkResult]);
 
   return (
-    <div className="space-y-20 pb-20">
+    <div className={isModalMode ? "space-y-8 pb-10" : "space-y-20 pb-20"}>
       {/* PR Verification Engine */}
       {!isModalMode && (
         <div className="w-full flex flex-col items-center stagger-item">
@@ -545,18 +581,49 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
         </div>
       )}
 
-        <div className="h-12 mt-4 flex justify-center mb-4">
+        <div className="flex justify-center -mb-8">
+          {isChecking && isModalMode && (
+            <div className="flex items-center gap-3 px-6 py-3 bg-[rgba(245,158,11,0.1)] text-[#F59E0B] border border-[rgba(245,158,11,0.2)] rounded-2xl text-[13px] font-black tracking-widest backdrop-blur-xl animate-pulse shadow-xl">
+              <IconRefresh className="w-5 h-5 animate-spin" /> INITIALIZING AUDIT ENGINE...
+            </div>
+          )}
           {checkResult && !isChecking && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[rgba(16,185,129,0.1)] text-[#10B981] border border-[rgba(16,185,129,0.2)] rounded-full text-[11px] font-bold backdrop-blur-md">
-              <IconCheck size={14} /> PR Verified: {checkResult.po} — {checkResult.materials.length} line items found
+            <div className="flex items-center gap-2 px-5 py-2.5 bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.2)] rounded-full text-[12px] font-bold backdrop-blur-md shadow-lg">
+              <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+              PR Verified: {checkResult.po} — {checkResult.materials.length} line items found
             </div>
           )}
           {error && !isChecking && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[rgba(239,68,68,0.1)] text-[#EF4444] border border-[rgba(239,68,68,0.2)] rounded-full text-[11px] font-bold backdrop-blur-md">
-              <IconX size={14} /> {error}
+            <div className="flex items-center gap-2 px-5 py-2.5 bg-[rgba(239,68,68,0.15)] text-[#EF4444] border border-[rgba(239,68,68,0.2)] rounded-full text-[12px] font-bold backdrop-blur-md shadow-lg">
+              <IconX size={16} /> {error}
             </div>
           )}
         </div>
+
+        {/* PR Financial Insights - MOVED HIGHER FOR MODAL */}
+        {checkResult && !isChecking && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <StatCard index={1} title="Total Items" value={checkResult.materials.length} subValue="Line items in this PR" glowColor="#6366F1" icon={IconClipboardCheck} />
+            <StatCard index={2} title="PR Value" value={`AED ${formatCurrency(checkResult.materials.reduce((acc, m) => acc + (parseFloat(m.Total) || 0), 0))}`} subValue="Gross total including VAT" glowColor="#10B981" icon={DollarSign} />
+            <StatCard index={3} title="Suppliers" value={new Set(checkResult.materials.map(m => m.Supplier)).size} subValue="Vendors associated" glowColor="#F59E0B" icon={Users} />
+            
+            {checkResult.globalHistory && checkResult.globalHistory.length > 0 ? (
+              <div className="glass-panel p-5 border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.03)] relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
+                <div className="absolute top-0 right-0 w-24 h-24 opacity-[0.05] rounded-full -mr-8 -mt-8 blur-2xl transition-all duration-500 group-hover:opacity-[0.15] bg-[#F59E0B]"></div>
+                <h3 className="text-[rgba(255,255,255,0.4)] text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <IconAlertCircle size={14} className="text-[#F59E0B]" /> Latest Remark
+                </h3>
+                <p className="text-[12px] text-white font-medium italic line-clamp-3 leading-relaxed">
+                  "{checkResult.globalHistory[0].remark || checkResult.globalHistory[0].Remark || 'No remark'}"
+                </p>
+              </div>
+            ) : (
+                <div className="glass-panel p-5 border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] flex flex-col justify-center items-center opacity-40">
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 text-center">No Audit History</p>
+                </div>
+            )}
+          </div>
+        )}
 
         {/* Verification Summary Dashboard */}
         {isVerificationMode && verificationImpact && (
@@ -1131,9 +1198,59 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
       {/* Static Sections - Hidden in Modal Mode */}
       {!isModalMode ? (
         <>
-          <div className="stagger-item" style={{ animationDelay: '100ms' }}>
-            <h1 className="text-4xl font-bold text-white tracking-tight mb-2">Procurement Dashboard</h1>
-            <p className="text-[rgba(255,255,255,0.4)] font-medium">Real-time purchase request monitoring & spend analysis</p>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 stagger-item" style={{ animationDelay: '100ms' }}>
+            <div>
+              <h1 className="text-4xl font-bold text-white tracking-tight mb-2">Procurement Dashboard</h1>
+              <p className="text-[rgba(255,255,255,0.4)] font-medium">Real-time purchase request monitoring & spend analysis</p>
+            </div>
+            
+            {/* Filter Bar */}
+            <div className="flex flex-wrap items-center gap-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] p-2 rounded-2xl backdrop-blur-md">
+              <div className="flex items-center gap-2 px-3 border-r border-[rgba(255,255,255,0.08)]">
+                <IconFilter size={14} className="text-[#F59E0B]" />
+                <span className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Filters</span>
+              </div>
+              
+              <div className="flex items-center gap-1.5 p-1 bg-black/20 rounded-xl border border-[rgba(255,255,255,0.05)]">
+                {['25', '26'].map(y => (
+                  <button 
+                    key={y}
+                    onClick={() => setFilters({ ...filters, year: y })}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${filters.year === y ? 'bg-[#F59E0B] text-black shadow-lg shadow-[#F59E0B]/20' : 'text-[rgba(255,255,255,0.4)] hover:text-white'}`}
+                  >
+                    CY 20{y}
+                  </button>
+                ))}
+              </div>
+
+              <select 
+                value={filters.department}
+                onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+                className="bg-black/20 border border-[rgba(255,255,255,0.05)] text-[11px] text-white font-bold py-1.5 px-3 rounded-xl outline-none focus:border-[#F59E0B] transition-all cursor-pointer min-w-[120px]"
+              >
+                {uniqueDepartments.map(d => (
+                  <option key={d} value={d} className="bg-[#06090F]">{d === 'All' ? 'All Departments' : d}</option>
+                ))}
+              </select>
+
+              <select 
+                value={filters.supplier}
+                onChange={(e) => setFilters({ ...filters, supplier: e.target.value })}
+                className="bg-black/20 border border-[rgba(255,255,255,0.05)] text-[11px] text-white font-bold py-1.5 px-3 rounded-xl outline-none focus:border-[#F59E0B] transition-all cursor-pointer max-w-[180px]"
+              >
+                {uniqueSuppliers.map(s => (
+                  <option key={s} value={s} className="bg-[#06090F]">{s === 'All' ? 'All Suppliers' : s}</option>
+                ))}
+              </select>
+
+              <button 
+                onClick={fetchGlobalStats}
+                className="p-2 bg-[rgba(245,158,11,0.1)] text-[#F59E0B] rounded-xl border border-[rgba(245,158,11,0.2)] hover:bg-[#F59E0B] hover:text-black transition-all"
+                title="Refresh Data"
+              >
+                <IconRefresh size={16} />
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative">
             {isLoadingStats && (
@@ -1147,34 +1264,7 @@ const Overview = ({ darkMode, initialPR, isModalMode }) => {
             <StatCard index={4} title="Monthly Spend" value={dashboardStats.monthlySpend} subValue="Budget: AED 650K" glowColor="#F59E0B" icon={DollarSign} />
           </div>
         </>
-      ) : checkResult && (
-        <>
-          <div className="stagger-item">
-            <h2 className="text-2xl font-bold text-white mb-2">PR Financial Insights</h2>
-            <p className="text-[rgba(255,255,255,0.4)] font-medium uppercase text-[10px] tracking-widest">Audit Analytics for {checkResult.po}</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <StatCard index={1} title="Total Items" value={checkResult.materials.length} subValue="Line items in this PR" glowColor="#6366F1" icon={IconClipboardCheck} />
-            <StatCard index={2} title="PR Value" value={`AED ${formatCurrency(checkResult.materials.reduce((acc, m) => acc + (parseFloat(m.Total) || 0), 0))}`} subValue="Gross total including VAT" glowColor="#10B981" icon={DollarSign} />
-            <StatCard index={3} title="Suppliers" value={new Set(checkResult.materials.map(m => m.Supplier)).size} subValue="Vendors associated" glowColor="#F59E0B" icon={Users} />
-            
-            {checkResult.globalHistory && checkResult.globalHistory.length > 0 && (
-              <div className="glass-panel p-5 border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.03)] relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
-                <div className="absolute top-0 right-0 w-24 h-24 opacity-[0.05] rounded-full -mr-8 -mt-8 blur-2xl transition-all duration-500 group-hover:opacity-[0.15] bg-[#F59E0B]"></div>
-                <h3 className="text-[rgba(255,255,255,0.4)] text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <IconAlertCircle size={14} className="text-[#F59E0B]" /> Latest Audit Remark
-                </h3>
-                <p className="text-[12px] text-white font-medium italic line-clamp-3 leading-relaxed">
-                  "{checkResult.globalHistory[0].remark || checkResult.globalHistory[0].Remark || 'No remark provided'}"
-                </p>
-                <div className="mt-3 text-[9px] text-[rgba(255,255,255,0.3)] font-black uppercase tracking-widest">
-                  {checkResult.globalHistory[0].second_time_pr || checkResult.globalHistory[0]['Second Time PR'] || 'RECENT AUDIT'}
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      )}
+      ) : null}
       {!isModalMode ? (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           <div className="lg:col-span-3 glass-panel p-8">

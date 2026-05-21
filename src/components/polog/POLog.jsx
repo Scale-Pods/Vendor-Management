@@ -1,21 +1,17 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   IconClipboardData,
-  IconUpload,
   IconTrash,
   IconCheck,
   IconX,
   IconLoader2,
   IconSearch,
-  IconChevronDown,
-  IconArrowDown,
   IconTableImport,
   IconRowInsertBottom,
   IconBuildingStore,
   IconCoins,
   IconUser,
   IconClock,
-  IconHash,
   IconCalendar,
   IconFileText,
   IconBuilding,
@@ -23,7 +19,16 @@ import {
   IconEye,
   IconFileCertificate,
   IconRefresh,
+  IconChevronLeft,
+  IconChevronRight,
+  IconChartPie,
+  IconReceipt2,
+  IconPackage,
+  IconWallet,
+  IconArrowUpRight,
+  IconArrowsDiff
 } from '@tabler/icons-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import BoxLoader from '../ui/BoxLoader';
 
 
@@ -44,10 +49,12 @@ const PO_COLUMNS = [
   'QC Ref.',
   'Doc. Remarks',
   'Terms & Conditions',
+  'PO Revision',
   'Attachments',
   'Approval History',
   'Approval Config',
   'Discount',
+  'Charges',
   'Net Price',
   'VAT',
   'Total Price',
@@ -58,30 +65,50 @@ const PO_COLUMNS = [
 ];
 
 const MATERIAL_COLUMNS = [
-  'Project',
-  'PR',
+  'Sr.No',
+  'Item Code',
   'Description',
+  'Class',
+  'BOQ Section',
+  'BOQ Activity',
+  'UOM',
+  'Purpose',
+  'Vat Exempt',
   'Qty',
-  'Req Qty',
   'Remain Qty',
-  'Next Doc',
   'Rate',
-  'Price',
-  'VAT',
   'Total',
-  'Supplier',
+  'PR',
+];
+
+const DETAIL_COLUMNS = [
+  'Seq #',
+  'Item Code',
+  'Description',
+  'Class',
+  'BOQ Section',
+  'BOQ Activity',
+  'UOM',
+  'Purpose',
+  'Vat Exempt',
+  'Req. Qty',
+  'Remain Qty',
+  'Rate',
+  'Total',
+  'Next Doc'
 ];
 
 // Indices to strip from the raw paste (0-based)
-const STRIP_INDICES = new Set();
+// Bypassing 18: PDF Rpt, 19: PDF Rpt No Appr.
+const STRIP_INDICES = new Set([18, 19]);
 
-const WEBHOOK_BASE = import.meta.env.VITE_N8N_WEBHOOK_BASE;
 const IMPORT_WEBHOOK = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/552d22ef-17fd-4dfd-b4d5-dfce6624c5f6`;
 const FETCH_WEBHOOK = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO%20Data`;
+const COMPARE_WEBHOOK = `https://n8n.srv1010832.hstgr.cloud/webhook/d0456a7b-66b8-4a06-a838-934451ee34dc`;
 
 const PAGE_SIZE = 50;
 
-/* ─── Toast Component ─── */
+/* â”€â”€â”€ Toast Component â”€â”€â”€ */
 const Toast = ({ message, type, onClose }) => {
   useEffect(() => {
     const t = setTimeout(onClose, 4000);
@@ -105,7 +132,7 @@ const Toast = ({ message, type, onClose }) => {
   );
 };
 
-/* ─── Webhook PR Insight Sub-components ─── */
+/* â”€â”€â”€ Webhook PR Insight Sub-components â”€â”€â”€ */
 const POLogCard = ({ row }) => {
   const ref = (row.Ref || 'N/A').replace(' (View Doc)', '');
   const status = row.Status || 'Open';
@@ -117,7 +144,6 @@ const POLogCard = ({ row }) => {
   const month = row.Month || 'N/A';
   
   const hasOriginalPrice = row['Original Pirce'] || row['Original Price'];
-  const hasChangePrice = row['Change in Price'];
 
   return (
     <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6 space-y-4 hover:border-[#F59E0B] hover:shadow-[0_0_15px_rgba(245,158,11,0.08)] transition-all duration-300">
@@ -155,7 +181,7 @@ const POLogCard = ({ row }) => {
         </div>
       </div>
 
-      {/* Row 3: Req Ref · QC Ref · Month in chips */}
+      {/* Row 3: Req Ref Â· QC Ref Â· Month in chips */}
       <div className="flex flex-wrap gap-2 text-[10px] font-bold text-[rgba(255,255,255,0.5)]">
         <span className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] px-2.5 py-1 rounded-lg">
           Req Ref: {reqRef}
@@ -168,7 +194,7 @@ const POLogCard = ({ row }) => {
         </span>
       </div>
 
-      {/* Footer: Net Price · VAT · Total Price */}
+      {/* Footer: Net Price Â· VAT Â· Total Price */}
       <div className="grid grid-cols-3 gap-2.5 pt-2">
         <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl p-2 text-center text-[#F59E0B]">
           <p className="text-[8px] font-extrabold uppercase opacity-60">Net</p>
@@ -189,7 +215,7 @@ const POLogCard = ({ row }) => {
         <div className="text-[10px] text-[rgba(255,255,255,0.4)] flex items-center gap-1.5 bg-[#090e17] px-3 py-1.5 rounded-xl border border-[rgba(255,255,255,0.03)] w-fit mt-1">
           <span className="font-extrabold text-[#F59E0B] uppercase text-[8px]">Comparison:</span>
           <span className="line-through">AED {hasOriginalPrice}</span>
-          <span className="text-[#F59E0B]">→</span>
+          <span className="text-[#F59E0B]">â†’</span>
           <span className="text-white font-bold">AED {row['Net Price']}</span>
         </div>
       )}
@@ -283,14 +309,22 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
   );
 };
 
-/* ─── Main Component ─── */
+/* â”€â”€â”€ Main Component â”€â”€â”€ */
 const POLog = () => {
   // Paste zone
   const [pasteText, setPasteText] = useState('');
-  const [rateDetailsText, setRateDetailsText] = useState('');
+  const [rateDetailsMap, setRateDetailsMap] = useState({}); // { [prRef]: text }
+  const [currentRatePrIndex, setCurrentRatePrIndex] = useState(0);
+  const [materialDetailMap, setMaterialDetailMap] = useState({}); // { [prRef]: text }
+  const [currentPrIndex, setCurrentPrIndex] = useState(0);
   const [parsedRows, setParsedRows] = useState([]);
   const [materialRows, setMaterialRows] = useState([]);
-  const [rateRowsUpdated, setRateRowsUpdated] = useState(0);
+  const [materialDetailRows, setMaterialDetailRows] = useState([]);
+  const [isComparing, setIsComparing] = useState(false);
+  const [comparisonModal, setComparisonModal] = useState({ show: false, prRef: null, data: [], isLive: true });
+  const [comparisonCache, setComparisonCache] = useState({}); // { [prRef]: { data, isLive: boolean } }
+  const comparisonLoadingRef = useRef(new Set()); // Tracks PRs currently being fetched to avoid duplicates
+  const [rateSummaryMap, setRateSummaryMap] = useState({}); // { [prRef]: { subtotal, discount, charges, net, manualTotal } }
   const [isImporting, setIsImporting] = useState(false);
   const [toast, setToast] = useState(null);
   const textareaRef = useRef(null);
@@ -306,7 +340,6 @@ const POLog = () => {
   const [logSearch, setLogSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState('All');
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
-  const logScrollRef = useRef(null);
   const [expandedCardRef, setExpandedCardRef] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
 
@@ -314,6 +347,37 @@ const POLog = () => {
   const [prDetails, setPrDetails] = useState({});
   const [prLoading, setPrLoading] = useState({});
   const [prError, setPrError] = useState({});
+
+  // Sync rateSummaryMap back to parsedRows for preview reflection
+  useEffect(() => {
+    if (Object.keys(rateSummaryMap).length === 0 || parsedRows.length === 0) return;
+
+    setParsedRows(prevRows => {
+      let changed = false;
+      const nextRows = prevRows.map(row => {
+        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+        const summaryKey = Object.keys(rateSummaryMap).find(k => k.trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === pr);
+        
+        if (summaryKey && rateSummaryMap[summaryKey]) {
+          const summary = rateSummaryMap[summaryKey];
+          const update = {};
+          
+          if (row['Discount'] !== summary.discount.toFixed(2)) update['Discount'] = summary.discount.toFixed(2);
+          if (row['Charges'] !== summary.charges.toFixed(2)) update['Charges'] = summary.charges.toFixed(2);
+          if (row['Net Price'] !== summary.net.toFixed(2)) update['Net Price'] = summary.net.toFixed(2);
+          if (row['VAT'] !== summary.vat.toFixed(2)) update['VAT'] = summary.vat.toFixed(2);
+          if (row['Total Price'] !== summary.total.toFixed(2)) update['Total Price'] = summary.total.toFixed(2);
+          
+          if (Object.keys(update).length > 0) {
+            changed = true;
+            return { ...row, ...update };
+          }
+        }
+        return row;
+      });
+      return changed ? nextRows : prevRows;
+    });
+  }, [rateSummaryMap, parsedRows.length]);
 
   const netPriceStr = selectedCard ? (selectedCard['Net Price'] || '0.00') : '0.00';
   const originalPriceStr = selectedCard ? (selectedCard['Original Pirce'] || selectedCard['Original Price'] || '0.00') : '0.00';
@@ -327,7 +391,6 @@ const POLog = () => {
     ? computedChangeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
     : rawChangeStr;
 
-  const changeVal = computedChangeVal > 0 ? computedChangeVal : (parseFloat(String(rawChangeStr).replace(/,/g, '')) || 0);
   const percentChange = origVal > 0 ? ((netVal - origVal) / origVal) * 100 : 0;
 
   const handleFetchPrData = useCallback(async (row, force = false) => {
@@ -353,7 +416,7 @@ const POLog = () => {
       let parsedJson;
       try {
         parsedJson = text ? JSON.parse(text) : { status: "Success", message: "Webhook executed successfully. No additional data payload returned." };
-      } catch (e) {
+      } catch {
         parsedJson = { message: text || "Webhook executed successfully." };
       }
 
@@ -554,7 +617,7 @@ const POLog = () => {
     return (
       <div className="space-y-1">
         <p className="text-[10px] text-white font-bold">
-          Detected: <span className="text-[#F59E0B]">{logsCount} PO Log</span> · <span className="text-[#F59E0B]">{ordersCount} Material Items</span>
+          Detected: <span className="text-[#F59E0B]">{logsCount} PO Log</span> Â· <span className="text-[#F59E0B]">{ordersCount} Material Items</span>
         </p>
         <p className="text-[9px] text-[rgba(255,255,255,0.3)] font-bold italic pt-1">
           Click 'VIEW FULL REPORT' to open deep comparison view
@@ -573,10 +636,14 @@ const POLog = () => {
     const purchaseOrders = [];
 
     rawItems.forEach(item => {
-      if (item.Ref) {
+      // Prioritize items with remark/status as metadata or PO logs
+      if (item.Ref || item.ref || item.Reference || item.reference) {
         poLogs.push(item);
-      } else if (item.PR || item.PR_No || item.PR_Number || item['PR No'] || item.Req_Ref || item['Req Ref']) {
+      } else if (item.PR || item.pr || item.PR_No || item.pr_no || item.PR_Number || item.pr_number || item['PR No'] || item.Req_Ref || item.req_ref || item['Req Ref']) {
         purchaseOrders.push(item);
+      } else if (item.remark || item.Remark || item.remarks || item.Remarks) {
+        // If it has a remark but no clear PR ref, it might be a general log
+        poLogs.push(item);
       } else {
         if (Object.keys(item).some(k => k.toLowerCase().includes('ref'))) {
           poLogs.push(item);
@@ -607,7 +674,7 @@ const POLog = () => {
         {/* Header Summary */}
         <div className="flex items-center gap-3 bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.15)] rounded-2xl px-5 py-3 w-fit text-[#F59E0B] font-black text-xs uppercase tracking-widest animate-zoom-in">
           <span>{poLogs.length} PO Log</span>
-          <span className="opacity-40">·</span>
+          <span className="opacity-40">Â·</span>
           <span>{purchaseOrders.length} Material Items</span>
         </div>
 
@@ -641,7 +708,7 @@ const POLog = () => {
         {purchaseOrders.length > 0 && (
           <div className="space-y-6 animate-slide-down">
             <h5 className="text-[11px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-[0.2em] border-b border-[rgba(255,255,255,0.05)] pb-2 flex items-center gap-2">
-              <IconBriefcase size={14} className="text-[#F59E0B]" /> Material List ({purchaseOrders.length})
+              <IconBriefcase size={14} className="text-[#F59E0B]" /> PR List ({purchaseOrders.length})
             </h5>
             <div className="space-y-6">
               {Object.entries(purchaseOrdersGrouped).map(([prNumber, groupItems]) => (
@@ -685,7 +752,7 @@ const POLog = () => {
     strip: 'rgba(255,255,255,0.015)',
   };
 
-  /* ─── Paste parsing ─── */
+  /* â”€â”€â”€ Paste parsing â”€â”€â”€ */
   const handlePaste = (e) => {
     const clipboardData = e.clipboardData || window.clipboardData;
     const pasted = clipboardData.getData('text');
@@ -728,22 +795,23 @@ const POLog = () => {
     parseTabData(e.target.value);
   };
 
-  const handleRateDetailsPaste = (e) => {
+  const handleRateDetailsPaste = (e, prRef) => {
     const clipboardData = e.clipboardData || window.clipboardData;
     const pasted = clipboardData.getData('text');
-    setRateDetailsText(pasted);
-    parseRateDetails(pasted);
+    const newMap = { ...rateDetailsMap, [prRef]: pasted };
+    setRateDetailsMap(newMap);
+    parseRateDetails(newMap);
     e.preventDefault();
   };
 
-  const handleRateDetailsChange = (e) => {
-    setRateDetailsText(e.target.value);
-    parseRateDetails(e.target.value);
+  const handleRateDetailsChange = (text, prRef) => {
+    const newMap = { ...rateDetailsMap, [prRef]: text };
+    setRateDetailsMap(newMap);
+    parseRateDetails(newMap);
   };
 
-  const parseRateDetails = (text) => {
+  const parseRateDetails = (map) => {
     const clearRateData = () => {
-      setRateRowsUpdated(0);
       setMaterialRows([]);
       setParsedRows(prevRows => prevRows.map(row => {
         if (row._rateUpdated) {
@@ -759,24 +827,16 @@ const POLog = () => {
       }));
     };
 
-    if (!text || !text.trim()) {
+    if (!map || Object.keys(map).length === 0) {
       clearRateData();
       return;
     }
 
-    const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-    if (lines.length === 0) {
-      clearRateData();
-      return;
-    }
-
-    // Detect delimiter: pipe vs tab
-    const pipeCount = lines.filter(l => l.includes('|')).length;
-    const tabCount = lines.filter(l => l.includes('\t')).length;
-    const delimiter = pipeCount >= tabCount ? '|' : '\t';
-
-    // PR reference pattern — e.g. PR-04776 or PR04776
-    const prPattern = /\bPR[-\s]?\d{3,7}\b/i;
+    // Accumulate totals per normalized PR key: { 'PR-04776': number }
+    const prTotals = {};
+    const prDiscounts = {};
+    const prCharges = {};
+    const extractedMaterials = [];
 
     // Normalize a PR ref string to "PR-XXXXX" uppercase
     const normalizePr = (s) => {
@@ -787,139 +847,290 @@ const POLog = () => {
     // Lines to skip
     const skipPattern = /^(seq#|item\s*code|charges|discount|sub\s*total|grand\s*total|vat|net\s*total)/i;
 
-    // Accumulate totals per normalized PR key: { 'PR-04776': number }
-    const prTotals = {};
-    const extractedMaterials = [];
+    Object.keys(map).forEach(mapPrRef => {
+      const text = map[mapPrRef];
+      if (!text || !text.trim()) return;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const cells = trimmed.split(delimiter).map(c => c.trim());
-      if (cells.length < 2) continue;
-      if (skipPattern.test(cells[0])) continue;
+      const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+      if (lines.length === 0) return;
 
-      // Find PR ref anywhere in the line
-      let prRef = null;
-      for (const cell of cells) {
-        const m = cell.match(prPattern);
-        if (m) { prRef = normalizePr(m[0]); break; }
-      }
-      if (!prRef) continue;
+      // Detect delimiter: pipe vs tab
+      const pipeCount = lines.filter(l => l.includes('|')).length;
+      const tabCount = lines.filter(l => l.includes('\t')).length;
+      const delimiter = pipeCount >= tabCount ? '|' : '\t';
 
-      // Collect all numeric values from this line
-      const nums = [];
-      for (let i = 0; i < cells.length; i++) {
-        const cleaned = cells[i].replace(/,/g, '');
-        const n = parseFloat(cleaned);
-        if (!isNaN(n) && isFinite(n) && /^-?\d+(\.\d+)?$/.test(cleaned)) {
-          nums.push({ val: n, idx: i });
+      // PR reference pattern â€” e.g. PR-04776 or PR04776
+      const prPattern = /\bPR[-\s]?\d{3,7}\b/i;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const cells = trimmed.split(delimiter).map(c => c.trim());
+        if (cells.length < 2) continue;
+
+        const firstCell = cells[0].toLowerCase();
+        
+        // Specifically capture header-level values
+        if (firstCell.includes('discount')) {
+          const val = parseFloat(cells[1].replace(/,/g, ''));
+          if (!isNaN(val)) prDiscounts[mapPrRef] = val;
+          continue;
         }
+        if (firstCell.includes('charges')) {
+          const val = parseFloat(cells[1].replace(/,/g, ''));
+          if (!isNaN(val)) prCharges[mapPrRef] = val;
+          continue;
+        }
+
+        // Skip other summary lines from materials
+        if (skipPattern.test(firstCell) || firstCell.includes('total') || firstCell.includes('vat')) continue;
+
+        // Use the mapPrRef as a fallback if no PR is found in line
+        let prRef = mapPrRef; 
+        for (const cell of cells) {
+          const m = cell.match(prPattern);
+          if (m) { prRef = normalizePr(m[0]); break; }
+        }
+
+        // Collect all numeric values from this line
+        const nums = [];
+        for (let i = 0; i < cells.length; i++) {
+          const cleaned = cells[i].replace(/,/g, '');
+          const n = parseFloat(cleaned);
+          if (!isNaN(n) && isFinite(n) && /^-?\d+(\.\d+)?$/.test(cleaned)) {
+            nums.push({ val: n, idx: i });
+          }
+        }
+        if (nums.length === 0) continue;
+
+        // Last numeric = line total
+        const lineTotal = nums[nums.length - 1].val;
+        prTotals[prRef] = (prTotals[prRef] || 0) + lineTotal;
+
+        // Identify indices based on the ERP layout
+
+        extractedMaterials.push({
+          srNo: cells[0] || '',
+          itemCode: cells[1] || '',
+          description: cells[2] || '',
+          className: cells[3] || '',
+          boqSection: cells[4] || '',
+          boqActivity: cells[5] || '',
+          uom: cells[6] || '',
+          purpose: cells[7] || '',
+          vatExempt: cells[8] || '',
+          qty: cells[9] || '0',
+          remainQty: cells[10] || '0',
+          rate: cells[11] || '0',
+          total: cells[12] || '0',
+          prRef: cells[13] || prRef, // Fallback to detected PR if not in last cell
+        });
       }
-      if (nums.length === 0) continue;
-
-      // Last numeric = line total
-      const lineTotal = nums[nums.length - 1].val;
-      prTotals[prRef] = (prTotals[prRef] || 0) + lineTotal;
-
-      // Identify indices based on the ERP layout
-      // Seq# (0) | Item Code (1) | Description (2) ...
-      // Qty is usually around index 9, Remain Qty 10, Rate 11, Total 12
-      // We will look for them safely:
-      const rateIndex = nums.length >= 2 ? nums[nums.length - 2].idx : -1;
-      const qtyIndex = nums.length >= 4 ? nums[nums.length - 4].idx : -1;
-      const remainQtyIndex = nums.length >= 3 ? nums[nums.length - 3].idx : -1;
-      
-      const description = cells.length > 2 ? cells[2] : cells[1];
-      const rate = rateIndex !== -1 ? cells[rateIndex] : '0';
-      const qty = qtyIndex !== -1 ? cells[qtyIndex] : '0';
-      const remainQty = remainQtyIndex !== -1 ? cells[remainQtyIndex] : '0';
-      
-      const nextDocCell = cells.find(c => /\b(QC|AZ|ENG)[-\s]?\w+/i.test(c)) || '';
-
-      extractedMaterials.push({
-        prRef,
-        description,
-        rate,
-        qty,
-        remainQty,
-        total: lineTotal.toString(),
-        nextDoc: nextDocCell,
-      });
-    }
+    });
 
     if (Object.keys(prTotals).length === 0) {
       clearRateData();
       return;
     }
 
-    // All matching inside updater to avoid stale-closure problem
-    setParsedRows((prevRows) => {
-      const matchedPRs = new Set();
-      const nextRows = prevRows.map(row => {
-        const rowPr = normalizePr((row['Req Ref'] || '').trim());
-        if (!rowPr || rowPr === 'PR-' || rowPr === 'PR-N/A') return row;
-        const found = prTotals[rowPr];
-        if (found !== undefined) {
-          matchedPRs.add(rowPr);
-          const netPrice = found;
-          const vatNum = netPrice * 0.05;
-          const totalPrice = netPrice + vatNum;
-          return {
-            ...row,
-            'Net Price': netPrice.toFixed(2),
-            'Price': netPrice.toFixed(2), // Send generic Price field
-            'VAT': vatNum.toFixed(2),
-            'Total Price': totalPrice.toFixed(2),
-            'Total': totalPrice.toFixed(2), // Send generic Total field
-            _rateUpdated: true,
-          };
-        }
-        return row;
-      });
+    // Map the extracted materials to the final materialRows format
+    const newMaterialRows = extractedMaterials.map(mat => {
 
-      const matched = matchedPRs.size;
-
-      // Map the extracted materials to the final materialRows format
-      const newMaterialRows = extractedMaterials.map(mat => {
-        const matchingRow = prevRows.find(r => normalizePr((r['Req Ref'] || '').trim()) === mat.prRef);
-        const priceNum = parseFloat(mat.total);
-        const vatNum = priceNum * 0.05;
-        const totalNum = priceNum + vatNum;
-
-        return {
-          'Project': matchingRow ? matchingRow['Project'] : '',
-          'PR': mat.prRef,
-          'Description': mat.description,
-          'Qty': mat.qty,
-          'Req Qty': mat.qty, // user wanted same
-          'Remain Qty': mat.remainQty,
-          'Next Doc': mat.nextDoc,
-          'Rate': mat.rate,
-          'Price': priceNum.toFixed(2),
-          'VAT': vatNum.toFixed(2),
-          'Total': totalNum.toFixed(2),
-          'Supplier': matchingRow ? matchingRow['Supplier'] : '',
-        };
-      });
-
-      // Can't set state from updater — set after via timeout
-      setTimeout(() => {
-        setRateRowsUpdated(matched);
-        setMaterialRows(newMaterialRows);
-      }, 0);
-      return nextRows;
+      return {
+        'Sr.No': mat.srNo,
+        'Item Code': mat.itemCode,
+        'Description': mat.description,
+        'Class': mat.className,
+        'BOQ Section': mat.boqSection,
+        'BOQ Activity': mat.boqActivity,
+        'UOM': mat.uom,
+        'Purpose': mat.purpose,
+        'Vat Exempt': mat.vatExempt,
+        'Qty': mat.qty,
+        'Remain Qty': mat.remainQty,
+        'Rate': mat.rate,
+        'Total': mat.total,
+        'PR': mat.prRef,
+      };
     });
+
+    const summary = {};
+    Object.keys(prTotals).forEach(rowPr => {
+      const netPrice = (prTotals[rowPr] || 0) + (prCharges[rowPr] || 0) - (prDiscounts[rowPr] || 0);
+      const vatNum = netPrice * 0.05;
+      const totalPrice = netPrice + vatNum;
+
+      summary[rowPr] = {
+        subtotal: prTotals[rowPr] || 0,
+        discount: prDiscounts[rowPr] || 0,
+        charges: prCharges[rowPr] || 0,
+        net: netPrice,
+        vat: vatNum,
+        total: totalPrice
+      };
+    });
+
+    // NOTE: Auto-sync fully disabled. Only update material rows.
+    // The right-side summary will only populate when the user pastes totals manually.
+    setMaterialRows(newMaterialRows);
+  };
+
+  const uniquePrs = useMemo(() => {
+    const prs = new Set();
+    parsedRows.forEach(row => {
+      const pr = (row['Req Ref'] || row.Req_Ref || '').trim();
+      if (pr) prs.add(pr);
+    });
+    return Array.from(prs);
+  }, [parsedRows]);
+
+  const handleMaterialDetailPaste = (e, prRef) => {
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const pasted = clipboardData.getData('text');
+    const newMap = { ...materialDetailMap, [prRef]: pasted };
+    setMaterialDetailMap(newMap);
+    parseAllMaterialDetails(newMap);
+    e.preventDefault();
+  };
+
+  const handleMaterialDetailChange = (text, prRef) => {
+    const newMap = { ...materialDetailMap, [prRef]: text };
+    setMaterialDetailMap(newMap);
+    parseAllMaterialDetails(newMap);
+  };
+
+  const parseAllMaterialDetails = (map) => {
+    let allMergedRows = [];
+    const skipPattern = /^(seq #|item code|description|class|boq section|boq activity|uom|purpose|req\. qty|remain qty|next doc)/i;
+    const knownUoms = ['trip', 'roll', 'drum', 'number', 'nos', 'kg', 'mtr', 'sqft', 'sqm', 'cum', 'ltr', 'box', 'pkt', 'set', 'unit', 'hrs', 'days'];
+
+    Object.keys(map).forEach((prRef) => {
+      const text = map[prRef];
+      if (!text || !text.trim()) return;
+
+      const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+      if (lines.length === 0) return;
+
+      const pipeCount = lines.filter(l => l.includes('|')).length;
+      const tabCount = lines.filter(l => l.includes('\t')).length;
+      const delimiter = pipeCount >= tabCount && pipeCount > 0 ? '|' : '\t';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || skipPattern.test(trimmed)) continue;
+
+        const cells = trimmed.split(delimiter).map(c => c.trim());
+        if (cells.length < 5) continue;
+
+        const rowObj = { _prRef: prRef, _delimiter: delimiter === '|' ? 'PIPE' : 'TAB' };
+        
+        // Initial mapping based on standard indices
+        DETAIL_COLUMNS.forEach((col, i) => {
+          rowObj[col] = cells[i] || '';
+        });
+
+        // Smart Shifting: If BOQ is missing, UOM and Qty will be at earlier indices
+        // We look for the first cell after index 3 that looks like a UOM or is followed by numbers
+        let uomIndex = -1;
+        for (let i = 4; i <= 7; i++) {
+          if (!cells[i]) continue;
+          const valLower = cells[i].toLowerCase();
+          // If this cell is a known UOM or the next cell is a number (quantity)
+          if (knownUoms.some(u => valLower.includes(u)) || (!isNaN(parseFloat(cells[i+1])) && cells[i+1] !== '')) {
+            uomIndex = i;
+            break;
+          }
+        }
+
+        if (uomIndex !== -1 && uomIndex !== 6) {
+          // We found UOM at a different index (e.g. 4 or 5 instead of 6)
+          // Shift the quantity and purpose fields accordingly
+          rowObj['UOM'] = cells[uomIndex] || '';
+          rowObj['Purpose'] = cells[uomIndex + 1] || '';
+          rowObj['Req. Qty'] = cells[uomIndex + 2] || '';
+          rowObj['Remain Qty'] = cells[uomIndex + 3] || '';
+          rowObj['Next Doc'] = cells[uomIndex + 4] || '';
+          
+          // Clear the BOQ fields that were mispopulated
+          if (uomIndex <= 5) rowObj['BOQ Activity'] = '';
+          if (uomIndex <= 4) rowObj['BOQ Section'] = '';
+        }
+
+        if (rowObj['Description'] || rowObj['Item Code'] || rowObj['Seq #']) {
+          allMergedRows.push(rowObj);
+        }
+      }
+    });
+
+    setMaterialDetailRows(allMergedRows);
+  };
+
+
+  const handleManualSummaryUpdate = (prRef, field, value) => {
+    const num = parseFloat(String(value).replace(/,/g, '')) || 0;
+    setRateSummaryMap(prev => {
+      const current = prev[prRef] || { subtotal: 0, discount: 0, charges: 0, net: 0, vat: 0, total: 0 };
+      const next = { ...current, [field]: num };
+      
+      // Re-calculate net and total if it's one of the components
+      if (['subtotal', 'discount', 'charges'].includes(field)) {
+        next.net = next.subtotal + next.charges - next.discount;
+        next.vat = next.net * 0.05;
+        next.total = next.net + next.vat;
+      }
+
+      return { ...prev, [prRef]: next };
+    });
+  };
+
+  const handleSummaryPaste = (e, prRef) => {
+    const pasted = e.clipboardData.getData('text');
+    e.preventDefault();
+    if (!pasted) return;
+
+    const lines = pasted.split(/\r?\n/);
+    let discount = 0, charges = 0, subtotal = 0, vat = 0, netTotal = 0;
+
+    lines.forEach(line => {
+      const parts = line.split(/[|:\t]/).map(p => p.trim());
+      if (parts.length < 2) return;
+      const label = parts[0].toLowerCase();
+      const val = parseFloat(parts[1].replace(/,/g, '')) || 0;
+      
+      if (label.includes('discount')) discount = val;
+      else if (label.includes('charges')) charges = val;
+      else if (label.includes('before vat')) subtotal = val;
+      else if (label.includes('vat')) vat = val;
+      else if (label.includes('net total')) netTotal = val;
+    });
+
+    handleManualSummaryUpdate(prRef, 'discount', discount);
+    handleManualSummaryUpdate(prRef, 'charges', charges);
+    if (subtotal > 0) handleManualSummaryUpdate(prRef, 'subtotal', subtotal);
+    if (vat > 0) handleManualSummaryUpdate(prRef, 'vat', vat);
+    if (netTotal > 0) handleManualSummaryUpdate(prRef, 'total', netTotal);
+
+    // Clear the input after a short delay to signify capture
+    if (e.target) {
+      setTimeout(() => {
+        e.target.value = '';
+      }, 100);
+    }
   };
 
   const handleClear = () => {
     setPasteText('');
-    setRateDetailsText('');
+    setRateDetailsMap({});
+    setRateSummaryMap({});
+    setCurrentRatePrIndex(0);
+    setMaterialDetailMap({});
+    setCurrentPrIndex(0);
     setParsedRows([]);
     setMaterialRows([]);
-    setRateRowsUpdated(0);
+    setMaterialDetailRows([]);
   };
 
-  /* ─── Inline editing ─── */
+  /* â”€â”€â”€ Inline editing â”€â”€â”€ */
   const handleCellEdit = (rowIdx, colName, value) => {
     setParsedRows((prev) => {
       const next = [...prev];
@@ -930,6 +1141,15 @@ const POLog = () => {
 
   const handleMaterialCellEdit = (rowIdx, colName, value) => {
     setMaterialRows((prev) => {
+      const next = [...prev];
+      next[rowIdx] = { ...next[rowIdx], [colName]: value };
+      return next;
+    });
+  };
+
+
+  const handleMaterialDetailCellEdit = (rowIdx, colName, value) => {
+    setMaterialDetailRows((prev) => {
       const next = [...prev];
       next[rowIdx] = { ...next[rowIdx], [colName]: value };
       return next;
@@ -962,19 +1182,66 @@ const POLog = () => {
     };
   }, [showVerifyDialog]);
 
-  /* ─── Import to webhook ─── */
+  /* â”€â”€â”€ Import to webhook â”€â”€â”€ */
   const handleImport = async () => {
     if (parsedRows.length === 0) return;
     setShowVerifyDialog(false);
     setIsImporting(true);
     try {
+      // Group by PR and add sequence markers (1, 2, 3...)
+      const prCounters = {};
+      const enrichedDetails = materialDetailRows.map(row => {
+        const pr = row._prRef || 'Ungrouped';
+        if (!prCounters[pr]) prCounters[pr] = 0;
+        prCounters[pr]++;
+        return {
+          ...row,
+          Marker: prCounters[pr] // 1, 2, 3... per PR
+        };
+      });
+
+      // Fields to send in the payload (clean, no junk)
+      const ALLOWED_STEP1_FIELDS = [
+        'Sr.No', 'Ref', 'PO Date', 'Approve / Reject', 'Status',
+        'Project', 'Company', 'Pending Approval', 'Supplier', 'PO Class',
+        'Entered By', 'Entered Time', 'Req Ref', 'QC Ref.',
+        'Doc. Remarks', 'Terms & Conditions', 'PO Revision', 'Attachments',
+        'Approval History', 'Approval Config',
+        'Discount', 'Charges', 'Net Price', 'VAT', 'Total Price',
+      ];
+
+      // Inject rate summary totals into step 1 data & strip junk fields
+      const enrichedStep1 = parsedRows.map(row => {
+        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+        const summaryKey = Object.keys(rateSummaryMap).find(k => k.trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === pr);
+        
+        // Start with a clean object containing only allowed fields
+        const clean = {};
+        ALLOWED_STEP1_FIELDS.forEach(key => {
+          if (row[key] !== undefined) clean[key] = row[key];
+        });
+
+        // Override with independently-pasted summary if available
+        if (summaryKey && rateSummaryMap[summaryKey]) {
+          const summary = rateSummaryMap[summaryKey];
+          clean['Discount'] = summary.discount.toFixed(2);
+          clean['Charges'] = summary.charges.toFixed(2);
+          clean['Net Price'] = summary.net.toFixed(2);
+          clean['VAT'] = summary.vat.toFixed(2);
+          clean['Total Price'] = summary.total.toFixed(2);
+        }
+
+        return clean;
+      });
+
       const response = await fetch(IMPORT_WEBHOOK, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'import_po_log',
-          rows: parsedRows,
-          materialRows: materialRows,
+          po_step_1: enrichedStep1,
+          materials_step_2: materialRows,
+          material_details_step_3: enrichedDetails,
         }),
       });
 
@@ -991,7 +1258,7 @@ const POLog = () => {
     }
   };
 
-  /* ─── Fetch existing log ─── */
+  /* â”€â”€â”€ Fetch existing log â”€â”€â”€ */
   const fetchLogData = useCallback(async () => {
     setLogLoading(true);
     try {
@@ -1098,18 +1365,243 @@ const POLog = () => {
     return result;
   }, [logData, logSearch, monthFilter]);
 
+  const dashboardStats = useMemo(() => {
+    if (!logData.length) return null;
+    
+    const stats = {
+      totalSpend: 0,
+      uniquePRs: new Set(),
+      uniqueSuppliers: new Set(),
+      statusDistribution: {
+        'Approved': 0,
+        'Open': 0,
+        'Rejected': 0,
+        'Pending': 0
+      },
+      processedRefs: new Set()
+    };
+
+    logData.forEach(row => {
+      const ref = row.Ref || row.Reference;
+      const pr = row['Req Ref'] || row.Req_Ref;
+      const status = row.Status || 'Open';
+      const supplier = row.Supplier;
+
+      // Track unique PRs and Suppliers regardless of Ref
+      if (pr) stats.uniquePRs.add(pr);
+      if (supplier) stats.uniqueSuppliers.add(supplier);
+
+      // Only sum spend and status for UNIQUE References to avoid double-counting item-level data
+      if (ref && !stats.processedRefs.has(ref)) {
+        stats.processedRefs.add(ref);
+        
+        const net = parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
+        stats.totalSpend += net;
+
+        if (status.includes('Approve')) stats.statusDistribution['Approved']++;
+        else if (status.includes('Reject')) stats.statusDistribution['Rejected']++;
+        else if (status.includes('Pending')) stats.statusDistribution['Pending']++;
+        else stats.statusDistribution['Open']++;
+      }
+    });
+
+    const chartData = Object.entries(stats.statusDistribution)
+      .filter(entry => entry[1] > 0)
+      .map(([name, value]) => ({ name, value }));
+
+    const COLORS = {
+      'Approved': '#10B981',
+      'Open': '#F59E0B',
+      'Pending': '#3B82F6',
+      'Rejected': '#EF4444'
+    };
+
+    return {
+      totalSpend: stats.totalSpend,
+      uniquePRs: stats.uniquePRs.size,
+      uniqueSuppliers: stats.uniqueSuppliers.size,
+      chartData,
+      colors: COLORS
+    };
+  }, [logData]);
+
+  const formatLargeCurrency = (value) => {
+    if (value >= 1000000) return `AED ${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `AED ${(value / 1000).toFixed(0)}K`;
+    return `AED ${value.toFixed(0)}`;
+  };
+  
+  const calculatePercentChange = (oldVal, newVal) => {
+    const o = parseFloat(String(oldVal || '0').replace(/,/g, '')) || 0;
+    const n = parseFloat(String(newVal || '0').replace(/,/g, '')) || 0;
+    if (o === 0) return n > 0 ? '+100%' : '0%';
+    const diff = ((n - o) / o) * 100;
+    return `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`;
+  };
+
+  const handleCompareWithExisting = useCallback(async (prRef, silent = false) => {
+    if (!prRef) return;
+    
+    // Check Cache first
+    if (comparisonCache[prRef]) {
+      if (!silent) {
+        setComparisonModal({ show: true, prRef, data: comparisonCache[prRef].data, isLive: false });
+      }
+      return;
+    }
+
+    if (comparisonLoadingRef.current.has(prRef)) return;
+    
+    if (!silent) setIsComparing(true);
+    comparisonLoadingRef.current.add(prRef);
+
+    try {
+      // Extract SR numbers directly from the raw rate details text for this PR
+      const skipPattern = /^(seq#|item\s*code|charges|discount|sub\s*total|grand\s*total|vat|net\s*total)/i;
+      const rawText = rateDetailsMap[prRef] || '';
+      const srNos = [];
+      
+      if (rawText.trim()) {
+        const lines = rawText.split(/\r?\n/).filter(l => l.trim());
+        for (const line of lines) {
+          const trimmed = line.trim();
+          const pipeCount = trimmed.split('|').length;
+          const tabCount = trimmed.split('\t').length;
+          const delimiter = pipeCount >= tabCount ? '|' : '\t';
+          const cells = trimmed.split(delimiter).map(c => c.trim());
+          if (cells.length < 2) continue;
+          const firstCell = cells[0].toLowerCase();
+          if (skipPattern.test(firstCell) || firstCell.includes('total') || firstCell.includes('vat')) continue;
+          const srCandidate = cells[0].trim();
+          if (/^\d+$/.test(srCandidate)) {
+            srNos.push(srCandidate);
+          }
+        }
+      }
+      
+      const uniqueSrNos = [...new Set(srNos)];
+      if (uniqueSrNos.length === 0) uniqueSrNos.push('');
+
+      let allExistingData = [];
+      let anySuccess = false;
+
+      for (const sr of uniqueSrNos) {
+        const url = `${COMPARE_WEBHOOK}?prNumber=${prRef}${sr ? `&srNumber=${sr}` : ''}`;
+        const response = await fetch(url);
+        if (response.ok) {
+          anySuccess = true;
+          const data = await response.json();
+          const existingData = Array.isArray(data) ? data : (data.data || data.items || []);
+          allExistingData = [...allExistingData, ...existingData];
+        }
+      }
+
+      if (anySuccess) {
+        const lookup = {};
+        allExistingData.forEach(item => {
+          const normalized = { ...item };
+          let latestVersion = 0;
+          for (let n = 5; n >= 1; n--) {
+            const hasRate = item[`change${n}_rate`] !== null && item[`change${n}_rate`] !== undefined && item[`change${n}_rate`] !== '';
+            const hasQty = item[`change${n}_qty`] !== null && item[`change${n}_qty`] !== undefined && item[`change${n}_qty`] !== '';
+            const hasSupplier = item[`change${n}_supplier`] !== null && item[`change${n}_supplier`] !== undefined && item[`change${n}_supplier`] !== '';
+            const hasDate = item[`change${n}_date`] !== null && item[`change${n}_date`] !== undefined && item[`change${n}_date`] !== '';
+            if (hasRate || hasQty || hasSupplier || hasDate) {
+              latestVersion = n;
+              break;
+            }
+          }
+          
+          if (latestVersion > 0) {
+            normalized.Qty = item[`change${latestVersion}_qty`] || item.Qty || item.Req_Qty || '0.00';
+            normalized.Rate = item[`change${latestVersion}_rate`] || item.Rate || '0.00';
+            normalized.Total = item[`change${latestVersion}_price`] || item[`change${latestVersion}_total`] || item.Total || '0.00';
+            normalized.Supplier = item[`change${latestVersion}_supplier`] || item.Supplier || '';
+            normalized.Description = item[`change${latestVersion}_description`] || item.Description || '';
+            normalized.Sr_No = (item.Sr_No || item.SrNo || item['Sr.No'] || '').toString();
+            normalized._versionUsed = latestVersion;
+          } else {
+            normalized.Qty = item.Qty || item.Req_Qty || '0.00';
+            normalized.Rate = item.Rate || '0.00';
+            normalized.Total = item.Total || '0.00';
+            normalized.Supplier = item.Supplier || '';
+            normalized.Description = item.Description || '';
+            normalized.Sr_No = (item.Sr_No || item.SrNo || item['Sr.No'] || '').toString();
+            normalized._versionUsed = 0;
+          }
+
+          // Match purely by Sr_No as requested
+          const key = normalized.Sr_No;
+          if (key) lookup[key] = normalized;
+        });
+
+        const targetPr = prRef.toString().trim().toUpperCase();
+        const step2Items = materialRows.filter(r => (r.PR || r.pr || r._prRef || '').toString().trim().toUpperCase() === targetPr);
+        const step3Items = materialDetailRows.filter(r => (r.PR || r.pr || r._prRef || '').toString().trim().toUpperCase() === targetPr);
+        const newItemsRaw = step3Items.length > 0 ? step3Items : step2Items;
+        const currentItems = newItemsRaw.map(item => ({
+          ...item,
+          Sr_No: (item['Sr.No'] || item.Sr_No || item.SrNo || item['Seq #'] || '').toString(),
+          'Qty': item['Qty'] || item['QTY'] || item['Req. Qty'] || item['Req Qty'] || item['Req_Qty'] || '0.00',
+          'Rate': item['Rate'] || item['RATE'] || '0.00',
+          'Total': item['Total'] || item['TOTAL'] || '0.00',
+          'Supplier': item['Supplier'] || item['SUPPLIER'] || '',
+        }));
+
+        const comparisonRows = [];
+        const matchedExistingKeys = new Set();
+
+        currentItems.forEach(newItem => {
+           const key = newItem.Sr_No;
+           const existing = lookup[key];
+           if (existing) matchedExistingKeys.add(key);
+           
+           comparisonRows.push({
+             key,
+             new: newItem,
+             existing: existing || null,
+             status: !existing ? 'NEW' : 'MATCHED'
+           });
+        });
+
+        Object.keys(lookup).forEach(key => {
+          if (!matchedExistingKeys.has(key)) {
+            comparisonRows.push({
+              key,
+              new: null,
+              existing: lookup[key],
+              status: 'MISSING'
+            });
+          }
+        });
+
+        // Store in cache
+        setComparisonCache(prev => ({ ...prev, [prRef]: { data: comparisonRows, isLive: true } }));
+        
+        if (!silent) {
+          setComparisonModal({ show: true, prRef, data: comparisonRows, isLive: true });
+        }
+      } else {
+        if (!silent) setToast({ message: 'Failed to fetch existing records', type: 'error' });
+      }
+    } catch (err) {
+      console.error('Comparison error:', err);
+      if (!silent) setToast({ message: 'Network error during comparison', type: 'error' });
+    } finally {
+      if (!silent) setIsComparing(false);
+      comparisonLoadingRef.current.delete(prRef);
+    }
+  }, [materialRows, materialDetailRows, rateDetailsMap, comparisonCache]); // handleCompareWithExisting dependencies
+
   // Dynamic visible log slicing for fast pagination rendering
   const visibleLog = useMemo(() => {
     return filteredLog.slice(0, displayCount);
   }, [filteredLog, displayCount]);
 
-  const logColumns = useMemo(() => {
-    return PO_COLUMNS;
-  }, []);
 
-  /* ─── Scroll ref kept for container, no pagination needed ─── */
+  /* â”€â”€â”€ Scroll ref kept for container, no pagination needed â”€â”€â”€ */
 
-  /* ─── Keyboard shortcut: Ctrl+F ─── */
+  /* â”€â”€â”€ Keyboard shortcut: Ctrl+F â”€â”€â”€ */
   const searchInputRef = useRef(null);
   useEffect(() => {
     const handler = (e) => {
@@ -1122,12 +1614,99 @@ const POLog = () => {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Auto-fetch comparison data when new PRs are detected
+  useEffect(() => {
+    uniquePrs.forEach(prRef => {
+      if (!comparisonCache[prRef] && !comparisonLoadingRef.current.has(prRef)) {
+        console.log('[AutoFetch] Triggering reconciliation for:', prRef);
+        handleCompareWithExisting(prRef, true); // true = silent fetch, don't open modal
+      }
+    });
+  }, [uniquePrs, materialRows, comparisonCache, handleCompareWithExisting]);
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: theme.bg }}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* ═══════════ PASTE ZONE ═══════════ */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-10">
+        {/* â•â•â•â•â•â•â•â•â•â•â• DASHBOARD OVERVIEW â•â•â•â•â•â•â•â•â•â•â• */}
+        {dashboardStats && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 stagger-item" style={{ animationDelay: '0ms' }}>
+          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Stat Card 1 */}
+            <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                <IconWallet size={64} className="text-[#F59E0B]" />
+              </div>
+              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Managed Spend</p>
+              <h4 className="text-3xl font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</h4>
+              <div className="flex items-center gap-1.5 mt-4 text-[#10B981]">
+                <IconArrowUpRight size={14} stroke={3} />
+                <span className="text-[11px] font-black uppercase tracking-tight">+12% from last cycle</span>
+              </div>
+            </div>
+
+            {/* Stat Card 2 */}
+            <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                <IconReceipt2 size={64} className="text-[#F59E0B]" />
+              </div>
+              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Purchase Requests</p>
+              <h4 className="text-3xl font-black text-white">{dashboardStats.uniquePRs}</h4>
+              <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Total PRs currently tracked</p>
+            </div>
+
+            {/* Stat Card 3 */}
+            <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                <IconPackage size={64} className="text-[#F59E0B]" />
+              </div>
+              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Active Suppliers</p>
+              <h4 className="text-3xl font-black text-white">{dashboardStats.uniqueSuppliers}</h4>
+              <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Trusted vendor network size</p>
+            </div>
+          </div>
+
+          {/* Pie Chart Card */}
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl h-[240px] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Status Distribution</p>
+              <IconChartPie size={16} className="text-[#F59E0B]" />
+            </div>
+            <div className="flex-1 w-full min-h-0 relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={dashboardStats.chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={75}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {dashboardStats.chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={dashboardStats.colors[entry.name]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip 
+                    contentStyle={{ background: '#121824', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
+                    itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Tooltip or Center Text could go here */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-2">
+                <span className="text-xl font-black text-white">{dashboardStats.uniquePRs}</span>
+                <span className="text-[8px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Total</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* â•â•â•â•â•â•â•â•â•â•â• PASTE ZONE â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="stagger-item" style={{ animationDelay: '0ms' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
@@ -1139,9 +1718,9 @@ const POLog = () => {
 
           <div className="mb-2">
             <h3 className="text-[13px] font-black text-white uppercase tracking-wider">Step 1: Paste PO Log</h3>
-            {parsedRows.length > 0 && !rateDetailsText && (
+            {parsedRows.length > 0 && Object.keys(rateDetailsMap).length === 0 && (
               <p className="text-[11px] font-bold text-[#10B981] mt-1 animate-pulse">
-                Step 1 complete — now paste the rate details below
+                Step 1 complete â€” now paste the rate details below
               </p>
             )}
           </div>
@@ -1194,14 +1773,14 @@ const POLog = () => {
                       {parsedRows.length} row{parsedRows.length > 1 ? 's' : ''} detected
                     </span>
                     <span className="text-[10px] text-[rgba(255,255,255,0.2)] ml-1">
-                      · {PO_COLUMNS.length} columns mapped
+                      Â· {PO_COLUMNS.length} columns mapped
                     </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
                     <IconClipboardData size={14} className="text-[rgba(255,255,255,0.15)]" />
                     <span className="text-[11px] text-[rgba(255,255,255,0.2)] font-medium">
-                      Waiting for data…
+                      Waiting for dataâ€¦
                     </span>
                   </div>
                 )}
@@ -1226,73 +1805,18 @@ const POLog = () => {
           </div>
         </div>
 
-        {/* ═══════════ STEP 2 & PREVIEW TABLE ═══════════ */}
+        {/* â•â•â•â•â•â•â•â•â•â•â• STEP 2 & PREVIEW TABLE â•â•â•â•â•â•â•â•â•â•â• */}
         {parsedRows.length > 0 && (
           <div className="stagger-item" style={{ animationDelay: '100ms' }}>
-            {/* Step 2: Rate Details Paste */}
-            <div className="mb-8 mt-2 border-t border-[rgba(255,255,255,0.05)] pt-6">
-              <h3 className="text-[13px] font-black text-white uppercase tracking-wider mb-2 flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-[rgba(255,255,255,0.1)] flex items-center justify-center text-[10px]">2</span>
-                Step 2: Paste Rate Details
-              </h3>
-              <p className="text-[10px] text-[rgba(255,255,255,0.4)] mb-4 pl-7">
-                (From ERP detail view: Seq#, Item Code, Description, Rate, Total...)
-              </p>
-              
-              <div
-                className="relative rounded-2xl overflow-hidden ml-7"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-                  border: `1px solid ${rateDetailsText ? theme.goldBorder : theme.border}`,
-                  transition: 'border-color 0.3s',
-                }}
-              >
-                {rateDetailsText && (
-                  <div
-                    className="absolute inset-0 pointer-events-none opacity-30"
-                    style={{
-                      background: 'radial-gradient(ellipse at top center, rgba(245,158,11,0.1) 0%, transparent 60%)',
-                    }}
-                  />
-                )}
-                <div className="relative p-1">
-                  <textarea
-                    value={rateDetailsText}
-                    onChange={handleRateDetailsChange}
-                    onPaste={handleRateDetailsPaste}
-                    placeholder="Paste Rate Details here..."
-                    className="w-full bg-transparent text-[13px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.15)] resize-none outline-none p-5 font-mono"
-                    style={{
-                      minHeight: '100px',
-                      maxHeight: '160px',
-                      lineHeight: '1.7',
-                    }}
-                    spellCheck={false}
-                  />
-                </div>
-                {/* Rate details success bar */}
-                {rateDetailsText && (
-                  <div className="px-5 py-3 border-t border-[rgba(255,255,255,0.05)] bg-[rgba(16,185,129,0.05)]">
-                    <div className="flex items-center gap-2">
-                      <IconCheck size={14} className="text-[#10B981]" />
-                      <span className="text-[11px] font-bold text-[#10B981]">
-                        {rateRowsUpdated} row{rateRowsUpdated !== 1 ? 's' : ''} matched and updated!
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
             <div className="flex items-center gap-3 mb-3">
               <IconTableImport size={18} className="text-[#F59E0B]" />
-              <h3 className="text-[13px] font-black text-white uppercase tracking-wider">Preview</h3>
+              <h3 className="text-[13px] font-black text-white uppercase tracking-wider">Preview ({parsedRows.length} Rows)</h3>
               <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-bold ml-1">
-                — Edit cells below before importing
+                â€” Edit cells below before importing
               </span>
             </div>
             <div
-              className="rounded-xl overflow-hidden"
+              className="rounded-xl overflow-hidden mb-8"
               style={{
                 border: `1px solid ${theme.goldBorder}`,
                 background: 'rgba(6,9,15,0.9)',
@@ -1383,14 +1907,14 @@ const POLog = () => {
                               type="text"
                               value={row[col] || ''}
                               onChange={(e) => handleCellEdit(rowIdx, col, e.target.value)}
-                              className="w-full text-[12px] font-medium outline-none px-3 py-2 focus:bg-[rgba(245,158,11,0.06)] focus:text-[#F59E0B] transition-colors"
+                              className="w-full text-[12px] font-medium outline-none px-3 py-2 focus:bg-[rgba(245,158,11,0.06)] focus:text-[#F59E0B] transition-colors text-[rgba(255,255,255,0.8)]"
                               style={{
                                 background: (row._rateUpdated && ['Rate', 'Net Price', 'VAT', 'Total Price'].includes(col)) 
                                   ? 'rgba(245, 158, 11, 0.15)' 
                                   : 'transparent',
                                 color: (row._rateUpdated && ['Rate', 'Net Price', 'VAT', 'Total Price'].includes(col)) 
                                   ? '#FCD34D' 
-                                  : theme.cellText,
+                                  : 'rgba(255,255,255,0.8)',
                                 minWidth: col === 'Doc. Remarks' || col === 'Terms & Conditions' ? '180px' : '100px',
                               }}
                             />
@@ -1403,19 +1927,232 @@ const POLog = () => {
               </div>
             </div>
 
+            {/* Step 2: Rate Details Paste */}
+            {uniquePrs.length > 0 && (
+              <div className="mb-8 mt-2 border-t border-[rgba(255,255,255,0.05)] pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[13px] font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-[rgba(255,255,255,0.1)] flex items-center justify-center text-[10px]">2</span>
+                    Step 2: Paste Rate Details
+                  </h3>
+                  
+                  {/* Card Navigation */}
+                  <div className="flex items-center gap-3 bg-[rgba(255,255,255,0.03)] px-3 py-1.5 rounded-xl border border-[rgba(255,255,255,0.05)]">
+                    <button 
+                      onClick={() => setCurrentRatePrIndex(prev => Math.max(0, prev - 1))}
+                      disabled={currentRatePrIndex === 0}
+                      className="p-1 hover:text-[#F59E0B] disabled:opacity-20 transition-all font-bold"
+                    >
+                      <IconChevronLeft size={18} />
+                    </button>
+                    <div className="flex flex-col items-center min-w-[100px]">
+                      <span className="text-[10px] font-black text-[#F59E0B] tracking-tighter">
+                        {uniquePrs[currentRatePrIndex]}
+                      </span>
+                      <span className="text-[8px] font-bold text-[rgba(255,255,255,0.2)] uppercase">
+                        {currentRatePrIndex + 1} of {uniquePrs.length} PRs
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => setCurrentRatePrIndex(prev => Math.min(uniquePrs.length - 1, prev + 1))}
+                      disabled={currentRatePrIndex === uniquePrs.length - 1}
+                      className="p-1 hover:text-[#F59E0B] disabled:opacity-20 transition-all font-bold"
+                    >
+                      <IconChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+                
+                <p className="text-[10px] text-[rgba(255,255,255,0.4)] mb-4 pl-7">
+                  (From ERP detail view: Item Code, Rate, Total for {uniquePrs[currentRatePrIndex]}...)
+                </p>
+                
+                <div className="relative h-[180px] w-full overflow-hidden ml-7" style={{ maxWidth: 'calc(100% - 28px)' }}>
+                  {uniquePrs.map((prRef, idx) => {
+                    const isActive = idx === currentRatePrIndex;
+                    const offsetIndex = idx - currentRatePrIndex;
+                    const val = rateDetailsMap[prRef] || '';
+
+                    return (
+                      <div
+                        key={prRef}
+                        className="absolute inset-0 transition-all duration-500 ease-out"
+                        style={{
+                          transform: `translateX(${offsetIndex * 105}%)`,
+                          opacity: isActive ? 1 : 0,
+                          pointerEvents: isActive ? 'auto' : 'none',
+                        }}
+                      >
+                        <div
+                          className="h-full rounded-2xl overflow-hidden"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                            border: `1px solid ${val ? theme.goldBorder : theme.border}`,
+                            transition: 'border-color 0.3s',
+                          }}
+                        >
+                          {val && (
+                            <div
+                              className="absolute inset-0 pointer-events-none opacity-20"
+                              style={{
+                                background: 'radial-gradient(ellipse at top center, rgba(245,158,11,0.1) 0%, transparent 60%)',
+                              }}
+                            />
+                          )}
+                          <div className="relative p-0.5 h-full flex flex-row">
+                            {/* Left Side: 80% Textarea */}
+                            <div className="w-[80%] h-full flex flex-col border-r border-[rgba(255,255,255,0.05)]">
+                              <textarea
+                                value={val}
+                                onChange={(e) => handleRateDetailsChange(e.target.value, prRef)}
+                                onPaste={(e) => handleRateDetailsPaste(e, prRef)}
+                                placeholder={`Paste Rate Details for ${prRef} here...`}
+                                className="w-full flex-1 bg-transparent text-[13px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.1)] resize-none outline-none p-5 font-mono"
+                                style={{ lineHeight: '1.7' }}
+                                spellCheck={false}
+                              />
+                              {val && (
+                                <div className="px-5 py-2 border-t border-[rgba(255,255,255,0.05)] bg-[rgba(16,185,129,0.05)]">
+                                  <div className="flex items-center gap-2">
+                                    <IconCheck size={12} className="text-[#10B981]" />
+                                    <span className="text-[10px] font-bold text-[#10B981]">
+                                      Data detected for {prRef}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="w-[20%] h-full bg-[rgba(255,255,255,0.01)] p-4 flex flex-col gap-5 overflow-y-auto border-l border-[rgba(255,255,255,0.03)] backdrop-blur-sm">
+                              <div className="h-full">
+                                  {/* Minimalist Empty State: Plain Text Box */}
+                                  {!rateSummaryMap[prRef]?.net ? (
+                                    <div className="pt-2">
+                                      <textarea 
+                                        onPaste={(e) => handleSummaryPaste(e, prRef)}
+                                        placeholder="Total Price of the particular PR"
+                                        className="w-full bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] rounded-lg p-3 text-[10px] text-white font-medium outline-none h-[120px] resize-none placeholder:text-[rgba(255,255,255,0.2)] focus:border-[rgba(245,158,11,0.3)] transition-all leading-relaxed"
+                                      />
+                                      <p className="mt-2 text-[8px] font-black text-[rgba(255,255,255,0.15)] uppercase tracking-widest text-center">
+                                        Paste or Type Summary block
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    /* Populated State: Minimized List View */
+                                    <div className="space-y-0.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                      <div className="flex flex-col gap-0.5 pt-1">
+                                        <div className="flex items-center justify-between py-1 border-b border-[rgba(255,255,255,0.03)]">
+                                          <span className="text-[7px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-tight">Items Total</span>
+                                          <input 
+                                            type="text" 
+                                            value={rateSummaryMap[prRef]?.subtotal || '0.00'}
+                                            onChange={(e) => handleManualSummaryUpdate(prRef, 'subtotal', e.target.value)}
+                                            className="bg-transparent border-none text-[10px] font-black text-white p-0 outline-none w-[60px] text-right focus:text-[#F59E0B]"
+                                          />
+                                        </div>
+                                        <div className="flex items-center justify-between py-1 border-b border-[rgba(255,255,255,0.03)]">
+                                          <span className="text-[7px] font-black text-[rgba(239,68,68,0.4)] uppercase tracking-tight">Discount</span>
+                                          <input 
+                                            type="text" 
+                                            value={rateSummaryMap[prRef]?.discount || '0.00'}
+                                            onChange={(e) => handleManualSummaryUpdate(prRef, 'discount', e.target.value)}
+                                            className="bg-transparent border-none text-[10px] font-black text-[#EF4444] p-0 outline-none w-[60px] text-right focus:text-white"
+                                          />
+                                        </div>
+                                        <div className="flex items-center justify-between py-1 border-b border-[rgba(255,255,255,0.03)]">
+                                          <span className="text-[7px] font-black text-[rgba(16,185,129,0.4)] uppercase tracking-tight">Charges</span>
+                                          <input 
+                                            type="text" 
+                                            value={rateSummaryMap[prRef]?.charges || '0.00'}
+                                            onChange={(e) => handleManualSummaryUpdate(prRef, 'charges', e.target.value)}
+                                            className="bg-transparent border-none text-[10px] font-black text-[#10B981] p-0 outline-none w-[60px] text-right focus:text-white"
+                                          />
+                                        </div>
+                                        <div className="flex items-center justify-between py-1 border-b border-[rgba(255,255,255,0.03)]">
+                                          <span className="text-[7px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-tight">Before VAT</span>
+                                          <input 
+                                            type="text" 
+                                            value={rateSummaryMap[prRef]?.net || '0.00'}
+                                            onChange={(e) => handleManualSummaryUpdate(prRef, 'net', e.target.value)}
+                                            className="bg-transparent border-none text-[10px] font-black text-white p-0 outline-none w-[60px] text-right focus:text-[#F59E0B]"
+                                          />
+                                        </div>
+                                        <div className="flex items-center justify-between py-1 border-b border-[rgba(255,255,255,0.03)]">
+                                          <span className="text-[7px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-tight">VAT (5%)</span>
+                                          <input 
+                                            type="text" 
+                                            value={rateSummaryMap[prRef]?.vat || '0.00'}
+                                            onChange={(e) => handleManualSummaryUpdate(prRef, 'vat', e.target.value)}
+                                            className="bg-transparent border-none text-[10px] font-black text-white p-0 outline-none w-[60px] text-right focus:text-[#F59E0B]"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-4 pt-3 border-t border-[rgba(255,255,255,0.1)] flex items-center justify-between group">
+                                        <span className="text-[8px] font-black text-[#F59E0B] uppercase tracking-widest">Net Total</span>
+                                        <div className="text-[14px] font-black text-[#F59E0B] leading-none tracking-tight">
+                                          {rateSummaryMap[prRef]?.total?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                                        </div>
+                                      </div>
+                                      
+                                    </div>
+                                  )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                </div>
+
+                {/* Dots Indicator */}
+                <div className="flex justify-center gap-1.5 mt-4 ml-7">
+                  {uniquePrs.map((_, idx) => (
+                    <div 
+                      key={idx}
+                      className={`h-1 rounded-full transition-all duration-300 ${
+                        idx === currentRatePrIndex ? 'w-4 bg-[#F59E0B]' : 'w-1 bg-[rgba(255,255,255,0.1)]'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Material Preview Table */}
             {materialRows.length > 0 && (
               <div className="mt-8 animate-fade-in-up">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="w-5 h-5 rounded bg-[rgba(16,185,129,0.1)] flex items-center justify-center">
-                    <IconCheck size={14} className="text-[#10B981]" />
-                  </span>
-                  <h3 className="text-[13px] font-black text-white uppercase tracking-wider">
-                    Material Preview
-                  </h3>
-                  <span className="text-[10px] text-[#10B981] font-bold ml-1">
-                    — {materialRows.length} material records detected
-                  </span>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-5 h-5 rounded bg-[rgba(16,185,129,0.1)] flex items-center justify-center">
+                      <IconCheck size={14} className="text-[#10B981]" />
+                    </span>
+                    <h3 className="text-[13px] font-black text-white uppercase tracking-wider">
+                      Material Preview ({materialRows.length} Rows)
+                    </h3>
+                    <span className="text-[10px] text-[#10B981] font-bold ml-1">
+                      â€” {materialRows.length} material records detected
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {uniquePrs.map((prRef, idx) => {
+                      if (idx !== currentRatePrIndex) return null;
+                      
+                      return (
+                        <button
+                          key={prRef}
+                          onClick={() => handleCompareWithExisting(prRef)}
+                          disabled={isComparing}
+                          className="px-3 py-1.5 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)] text-[#F59E0B] text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-[#F59E0B] hover:text-black transition-all flex items-center gap-2 disabled:opacity-50"
+                        >
+                          {isComparing ? <IconRefresh size={12} className="animate-spin" /> : <IconArrowsDiff size={12} />}
+                          Compare {prRef}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div
                   className="rounded-xl overflow-hidden"
@@ -1524,11 +2261,280 @@ const POLog = () => {
               </div>
             )}
 
+            {/* Step 3: Material Details Paste (Swipable Cards) */}
+            {uniquePrs.length > 0 && (
+              <div className="mb-8 mt-6 border-t border-[rgba(255,255,255,0.05)] pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[13px] font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-[rgba(255,255,255,0.1)] flex items-center justify-center text-[10px]">3</span>
+                    Step 3: Paste Material Details 
+                    <span className="text-[10px] text-[rgba(255,158,11,0.6)] ml-2">
+                      (Differentiated by Req Ref)
+                    </span>
+                  </h3>
+                  
+                  {/* Card Navigation */}
+                  <div className="flex items-center gap-3 bg-[rgba(255,255,255,0.03)] px-3 py-1.5 rounded-xl border border-[rgba(255,255,255,0.05)]">
+                    <button 
+                      onClick={() => setCurrentPrIndex(prev => Math.max(0, prev - 1))}
+                      disabled={currentPrIndex === 0}
+                      className="p-1 hover:text-[#F59E0B] disabled:opacity-20 transition-all"
+                    >
+                      <IconChevronLeft size={18} />
+                    </button>
+                    <div className="flex flex-col items-center min-w-[100px]">
+                      <span className="text-[10px] font-black text-[#F59E0B] tracking-tighter">
+                        {uniquePrs[currentPrIndex]}
+                      </span>
+                      <span className="text-[8px] font-bold text-[rgba(255,255,255,0.2)] uppercase">
+                        {currentPrIndex + 1} of {uniquePrs.length} PRs
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => setCurrentPrIndex(prev => Math.min(uniquePrs.length - 1, prev + 1))}
+                      disabled={currentPrIndex === uniquePrs.length - 1}
+                      className="p-1 hover:text-[#F59E0B] disabled:opacity-20 transition-all"
+                    >
+                      <IconChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative h-[220px] w-full overflow-hidden">
+                  {uniquePrs.map((prRef, idx) => {
+                    const isActive = idx === currentPrIndex;
+                    const offsetIndex = idx - currentPrIndex;
+                    const val = materialDetailMap[prRef] || '';
+                    const parsedCount = materialDetailRows.filter(r => r._prRef === prRef).length;
+
+                    return (
+                      <div
+                        key={prRef}
+                        className="absolute inset-0 transition-all duration-500 ease-out"
+                        style={{
+                          transform: `translateX(${offsetIndex * 105}%)`,
+                          opacity: isActive ? 1 : 0,
+                          pointerEvents: isActive ? 'auto' : 'none',
+                        }}
+                      >
+                        <div
+                          className="h-full rounded-2xl overflow-hidden"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                            border: `1px solid ${val ? theme.goldBorder : theme.border}`,
+                            transition: 'border-color 0.3s',
+                          }}
+                        >
+                          {val && (
+                            <div
+                              className="absolute inset-0 pointer-events-none opacity-20"
+                              style={{
+                                background: 'radial-gradient(ellipse at top center, rgba(245,158,11,0.1) 0%, transparent 60%)',
+                              }}
+                            />
+                          )}
+                          <div className="relative p-1 h-full flex flex-col">
+                            <textarea
+                              value={val}
+                              onChange={(e) => handleMaterialDetailChange(e.target.value, prRef)}
+                              onPaste={(e) => handleMaterialDetailPaste(e, prRef)}
+                              placeholder={`Paste Material Details for ${prRef} here...`}
+                              className="w-full flex-1 bg-transparent text-[13px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.1)] resize-none outline-none p-5 font-mono"
+                              style={{ lineHeight: '1.7' }}
+                              spellCheck={false}
+                            />
+                            {parsedCount > 0 && (
+                              <div className="px-5 py-2 border-t border-[rgba(255,255,255,0.05)] bg-[rgba(16,185,129,0.05)] flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <IconCheck size={12} className="text-[#10B981]" />
+                                  <span className="text-[10px] font-bold text-[#10B981]">
+                                    {parsedCount} items detected Â· Scroll down for preview
+                                  </span>
+                                </div>
+                                <span className="text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-widest">
+                                  {materialDetailRows.find(r => r._prRef === prRef)?._delimiter || 'Auto'} Delimited
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Dots Indicator */}
+                <div className="flex justify-center gap-1.5 mt-4">
+                  {uniquePrs.map((_, idx) => (
+                    <div 
+                      key={idx}
+                      className={`h-1 rounded-full transition-all duration-300 ${
+                        idx === currentPrIndex ? 'w-4 bg-[#F59E0B]' : 'w-1 bg-[rgba(255,255,255,0.1)]'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Material Detail Preview Table */}
+            <div style={{ display: materialDetailRows.length > 0 ? 'block' : 'none' }} className="mt-8 animate-fade-in-up pb-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-xl bg-[rgba(245,158,11,0.1)] flex items-center justify-center border border-[rgba(245,158,11,0.2)]">
+                    <IconClipboardData size={18} className="text-[#F59E0B]" />
+                  </div>
+                  <div>
+                    <h3 className="text-[14px] font-black text-white uppercase tracking-wider">
+                      Material Detail Preview
+                    </h3>
+                    <p className="text-[10px] text-[rgba(255,255,255,0.4)] font-bold uppercase tracking-widest mt-0.5">
+                      {materialDetailRows.length} Detailed line items detected
+                    </p>
+                  </div>
+                </div>
+                
+                <div
+                  className="rounded-2xl overflow-hidden shadow-2xl"
+                  style={{
+                    background: 'rgba(15,21,32,0.8)',
+                    border: `1px solid ${theme.goldBorder}`,
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <div className="overflow-x-auto max-h-[500px]">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="sticky top-0 z-20">
+                          <th
+                            style={{
+                              background: theme.headerBg,
+                              color: 'rgba(255,255,255,0.3)',
+                              fontSize: '9px',
+                              fontWeight: 900,
+                              textTransform: 'uppercase',
+                              padding: '12px 14px',
+                              borderRight: `1px solid ${theme.border}`,
+                              borderBottom: `2px solid ${theme.goldBorder}`,
+                              width: '50px',
+                              textAlign: 'center',
+                              position: 'sticky',
+                              left: 0,
+                            }}
+                          >
+                            #
+                          </th>
+                          {DETAIL_COLUMNS.map((col, i) => (
+                            <th
+                              key={i}
+                              style={{
+                                background: theme.headerBg,
+                                color: theme.gold,
+                                fontSize: '10px',
+                                fontWeight: 900,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.1em',
+                                padding: '12px 16px',
+                                borderRight: `1px solid ${theme.border}`,
+                                borderBottom: `2px solid ${theme.goldBorder}`,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[rgba(255,255,255,0.03)]">
+                        {materialDetailRows.map((row, rowIdx) => (
+                          <tr
+                            key={rowIdx}
+                            style={{
+                              background: rowIdx % 2 === 1 ? 'rgba(255,255,255,0.015)' : 'transparent',
+                            }}
+                            className="hover:bg-[rgba(245,158,11,0.05)] transition-all duration-200 group"
+                          >
+                            <td
+                              className="text-center"
+                              style={{
+                                fontSize: '11px',
+                                color: 'rgba(255,255,255,0.2)',
+                                fontWeight: 800,
+                                padding: '10px 14px',
+                                borderRight: `1px solid ${theme.border}`,
+                                background: theme.headerBg,
+                                position: 'sticky',
+                                left: 0,
+                                zIndex: 10,
+                              }}
+                            >
+                              {rowIdx + 1}
+                            </td>
+                            {DETAIL_COLUMNS.map((col, colIdx) => {
+                              const cellValue = row[col] || '';
+                              const prRef = row._prRef;
+                              const comparisonLookup = comparisonCache[prRef]?.data;
+                              let isDifferent = false;
+                              let originalValue = null;
+
+                              if (comparisonLookup) {
+                                const sr = (row['Sr.No'] || row.Sr_No || row.SrNo || row['Seq #'] || '').toString();
+                                const compRow = comparisonLookup.find(c => c.key === sr);
+                                if (compRow && compRow.existing) {
+                                  let dbKey = col;
+                                  if (col === 'Req. Qty') dbKey = 'Qty';
+                                  const dbVal = compRow.existing[dbKey];
+                                  if (dbVal && cellValue.toString().trim() !== String(dbVal).trim()) {
+                                    if (['Qty', 'Rate', 'Total', 'Supplier'].includes(dbKey)) {
+                                      isDifferent = true;
+                                      originalValue = dbVal;
+                                    }
+                                  }
+                                }
+                              }
+
+                              return (
+                                <td
+                                  key={colIdx}
+                                  style={{
+                                    borderRight: `1px solid ${theme.border}`,
+                                    padding: 0,
+                                  }}
+                                >
+                                  <div className="relative group/cell">
+                                    <input
+                                      type="text"
+                                      value={cellValue}
+                                      onChange={(e) => handleMaterialDetailCellEdit(rowIdx, col, e.target.value)}
+                                      className={`w-full bg-transparent text-[13px] font-semibold outline-none px-4 py-3 focus:bg-[rgba(245,158,11,0.08)] focus:text-[#F59E0B] transition-colors ${
+                                        isDifferent ? 'text-[#EF4444] font-black' : 'text-[rgba(255,255,255,0.85)]'
+                                      }`}
+                                      style={{
+                                        minWidth: col === 'Description' ? '280px' : '120px',
+                                        fontVariantNumeric: 'tabular-nums'
+                                      }}
+                                    />
+                                    {isDifferent && (
+                                      <div className="absolute bottom-full left-4 mb-2 invisible group-hover/cell:visible bg-[#EF4444] text-white text-[9px] font-black px-2 py-1 rounded shadow-xl whitespace-nowrap z-[100] animate-in fade-in zoom-in-95 duration-150">
+                                        EXISTING: {originalValue}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
             {/* Action buttons under preview */}
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={triggerVerifyDialog}
-                disabled={isImporting || !pasteText || !rateDetailsText}
+                disabled={isImporting || !pasteText || Object.keys(rateDetailsMap).length === 0}
                 className="px-6 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:shadow-xl disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
                 style={{
                   background: 'linear-gradient(135deg, #F59E0B, #D97706)',
@@ -1548,12 +2554,12 @@ const POLog = () => {
           </div>
         )}
 
-        {/* ═══════════ EXISTING PO LOG ═══════════ */}
+        {/* â•â•â•â•â•â•â•â•â•â•â• EXISTING PO LOG â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="stagger-item" style={{ animationDelay: '200ms' }}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 rounded-full bg-[rgba(255,255,255,0.15)]" />
-              <h2 className="text-lg font-bold text-white tracking-tight">Material List</h2>
+              <h2 className="text-lg font-bold text-white tracking-tight">PR List</h2>
               {logData.length > 0 && (
                 <span className="text-[10px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-widest ml-1">
                   {filteredLog.length} ENTRIES
@@ -1604,7 +2610,7 @@ const POLog = () => {
                   type="text"
                   value={logSearch}
                   onChange={(e) => { setLogSearch(e.target.value); setDisplayCount(PAGE_SIZE); }}
-                  placeholder="Search PR Number… (Ctrl+F)"
+                  placeholder="Search PR Numberâ€¦ (Ctrl+F)"
                   className="w-full bg-transparent text-[12px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.15)] outline-none"
                 />
                 {logSearch && (
@@ -1619,11 +2625,16 @@ const POLog = () => {
           {logLoading ? (
             <BoxLoader />
           ) : logData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <IconRowInsertBottom size={32} className="text-[rgba(255,255,255,0.1)]" />
-              <span className="text-[12px] text-[rgba(255,255,255,0.2)] font-medium">
-                No Material List entries yet. Import data above to get started.
-              </span>
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 animate-fade-in">
+              <div className="p-8 rounded-full bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] shadow-2xl">
+                <IconRowInsertBottom size={80} className="text-[rgba(255,255,255,0.1)] animate-pulse" />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-bold text-white tracking-tight">Your PR List is Empty</h3>
+                <p className="text-[13px] text-[rgba(255,255,255,0.3)] max-w-sm mx-auto leading-relaxed">
+                  Start by importing your purchase requisition data using the import tools above.
+                </p>
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
@@ -1728,7 +2739,7 @@ const POLog = () => {
                           {/* Webhook insights inside the expanded card */}
                           <div className="mt-4 pt-3 border-t border-[rgba(255,255,255,0.06)]">
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-wider">Material List PR Insights</p>
+                              <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-wider">PR List Insights</p>
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1780,12 +2791,12 @@ const POLog = () => {
                             <IconUser size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
                             <span className="truncate">{row['Entered By'] || 'N/A'}</span>
                           </div>
-                          <span className="mx-1.5 opacity-20">•</span>
+                          <span className="mx-1.5 opacity-20">â€¢</span>
                           <div className="flex items-center gap-1.5 truncate">
                             <IconClock size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
                             <span className="truncate">{row['Entered Time'] || 'N/A'}</span>
                           </div>
-                          <span className="mx-1.5 opacity-20">•</span>
+                          <span className="mx-1.5 opacity-20">â€¢</span>
                           <div className="flex items-center gap-1.5 truncate">
                             <IconCalendar size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
                             <span className="truncate">{row['PO Date'] || 'N/A'}</span>
@@ -2014,15 +3025,28 @@ const POLog = () => {
                         <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Initial Price (Baseline)</p>
                         <p className="text-sm font-semibold text-[rgba(255,255,255,0.45)] line-through mt-0.5">AED {originalPriceStr}</p>
                       </div>
-                      <div className="text-sm text-[rgba(255,255,255,0.2)] font-black mt-3 md:mt-0">➔</div>
+                      <div className="text-sm text-[rgba(255,255,255,0.2)] font-black mt-3 md:mt-0">âž”</div>
                       <div className="text-center md:text-left">
                         <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-widest">Current Price (Net)</p>
                         <p className="text-sm font-black text-white mt-0.5">AED {netPriceStr}</p>
                         {(() => {
                           const modalPrDetails = prDetails[selectedCard.Ref];
-                          const prRemarks = Array.isArray(modalPrDetails) 
-                            ? modalPrDetails.map(item => item.remark).filter(Boolean).join(' | ') 
-                            : null;
+                          // Robust remark extraction from nested payload
+                          const extractRemarks = (data) => {
+                            if (!data) return [];
+                            if (Array.isArray(data)) {
+                              return data.flatMap(item => {
+                                if (item.remark || item.Remark) return [item.remark || item.Remark];
+                                if (item.data && Array.isArray(item.data)) return extractRemarks(item.data);
+                                return [];
+                              });
+                            }
+                            if (data.data && Array.isArray(data.data)) return extractRemarks(data.data);
+                            return data.remark || data.Remark ? [data.remark || data.Remark] : [];
+                          };
+                          
+                          const allRemarks = extractRemarks(modalPrDetails);
+                          const prRemarks = allRemarks.length > 0 ? allRemarks.filter(Boolean).join(' | ') : null;
                           if (prRemarks) {
                             return (
                               <p className="text-[10px] text-[rgba(255,255,255,0.5)] italic mt-1.5 max-w-[250px] leading-tight border-l-2 border-[rgba(245,158,11,0.5)] pl-2 py-0.5">
@@ -2053,7 +3077,7 @@ const POLog = () => {
                           <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
                             netVal > origVal ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
                           }`}>
-                            {netVal > origVal ? '▲' : '▼'} {Math.abs(percentChange).toFixed(1)}%
+                            {netVal > origVal ? 'â–²' : 'â–¼'} {Math.abs(percentChange).toFixed(1)}%
                           </span>
                         )}
                       </div>
@@ -2107,19 +3131,27 @@ const POLog = () => {
                     <div>
                       <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Doc. Remarks</p>
                       <p className="text-white font-medium text-xs mt-1 bg-[#090e17] p-2.5 rounded-lg border border-[rgba(255,255,255,0.03)] italic">
-                        {selectedCard['Doc. Remarks'] || 'No remarks recorded.'}
+                        {(() => {
+                          const val = selectedCard['Doc. Remarks'] || selectedCard.Doc_Remarks || selectedCard.Remarks || selectedCard.remarks;
+                          if (!val || val === 'N/A' || val.toLowerCase() === 'no remarks') return 'No remarks recorded.';
+                          return String(val).replace(/&amp;/g, '&');
+                        })()}
                       </p>
                     </div>
                     <div>
                       <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Terms & Conditions</p>
-                      <p className="text-white font-semibold text-xs mt-1 truncate" title={selectedCard['Terms & Conditions']}>
-                        {selectedCard['Terms & Conditions'] || 'No terms specified.'}
+                      <p className="text-white font-semibold text-xs mt-1 bg-[#090e17]/50 p-2 rounded-lg border border-[rgba(255,255,255,0.02)]" title={selectedCard['Terms & Conditions']}>
+                        {(() => {
+                          const val = selectedCard['Terms & Conditions'] || selectedCard.Terms_Conditions || selectedCard.terms;
+                          if (!val || val === 'N/A') return 'No terms specified.';
+                          return String(val).replace(/&amp;/g, '&');
+                        })()}
                       </p>
                     </div>
                     <div>
                       <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Attachments</p>
-                      <p className="text-white font-semibold text-xs mt-1">
-                        {selectedCard.Attachments || 'No attachments.'}
+                      <p className="text-[rgba(255,255,255,0.6)] font-semibold text-xs mt-1">
+                        {selectedCard.Attachments || selectedCard.attachments || 'No attachments identified.'}
                       </p>
                     </div>
                   </div>
@@ -2130,7 +3162,7 @@ const POLog = () => {
               <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6">
                 <h4 className="text-xs font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4 border-b border-[rgba(255,255,255,0.04)] pb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <IconFileText size={14} className="text-[#F59E0B]" /> Material List PR Insights
+                    <IconFileText size={14} className="text-[#F59E0B]" /> PR List Insights
                   </div>
                   <button 
                     onClick={(e) => {
@@ -2176,6 +3208,223 @@ const POLog = () => {
         </div>
       )}
 
+      {/* â•â•â•â•â•â•â•â•â•â•â• COMPARISON MODAL (REDESIGNED) â•â•â•â•â•â•â•â•â•â•â• */}
+      {comparisonModal.show && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 sm:p-12">
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl animate-fade-in" onClick={() => setComparisonModal({ ...comparisonModal, show: false })} />
+          
+          <div className="relative w-full max-w-7xl max-h-[92vh] bg-[#080c14] rounded-[40px] border border-[rgba(245,158,11,0.15)] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-zoom-in">
+            {/* Header */}
+            <div className="p-10 border-b border-[rgba(245,158,11,0.05)] flex items-center justify-between bg-gradient-to-b from-[#0e1420] to-[#080c14]">
+              <div className="flex items-center gap-6">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#F59E0B] to-[#D97706] flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+                  <IconArrowsDiff size={28} className="text-black" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-white tracking-tighter uppercase leading-none">PR Data Reconciliation</h3>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-[10px] text-[rgba(255,255,255,0.4)] font-black uppercase tracking-[0.2em]">Comparing database vs pasted for</span>
+                    <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[11px] font-black rounded-lg border border-[#F59E0B]/20">{comparisonModal.prRef}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${comparisonModal.isLive ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-blue-500/10 border-blue-500/20 text-blue-400'} text-[10px] font-black uppercase tracking-widest`}>
+                   <div className={`w-1.5 h-1.5 rounded-full ${comparisonModal.isLive ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'} shadow-[0_0_8px_currentColor]`} />
+                   {comparisonModal.isLive ? 'Live Sync' : 'Cached Data'}
+                </div>
+                <button 
+                  onClick={() => setComparisonModal({ ...comparisonModal, show: false })}
+                  className="p-3 hover:bg-white/5 rounded-2xl transition-all text-[rgba(255,255,255,0.3)] hover:text-white group"
+                >
+                  <IconX size={24} className="group-hover:rotate-90 transition-transform duration-300" />
+                </button>
+              </div>
+            </div>
+
+            {/* Comparison Content */}
+            <div className="flex-1 overflow-y-auto p-10 space-y-6 custom-scrollbar">
+              {comparisonModal.data.map((row, idx) => {
+                 const diffFields = ['Qty', 'Rate', 'Total'].filter(f => {
+                   if (!row.existing || !row.new) return false;
+                   const valE = parseFloat(String(row.existing[f] || '0').replace(/,/g, ''));
+                   const valN = parseFloat(String(row.new[f] || '0').replace(/,/g, ''));
+                   return Math.abs(valE - valN) > 0.01;
+                 });
+                 const isModified = diffFields.length > 0;
+                 
+                 return (
+                   <div key={idx} 
+                      className="animate-slide-in-row opacity-0"
+                      style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: 'forwards' }}
+                   >
+                     <div className={`relative bg-[#0d121d] rounded-3xl border transition-all duration-500 hover:scale-[1.005] group/row ${
+                        row.status === 'NEW' ? 'border-emerald-500/20 hover:border-emerald-500/40' :
+                        row.status === 'MISSING' ? 'border-rose-500/20 opacity-60 grayscale' :
+                        isModified ? 'border-[#F59E0B]/30 hover:border-[#F59E0B]/50 shadow-[0_10px_40px_rgba(245,158,11,0.05)]' :
+                        'border-white/5 hover:border-white/10'
+                     }`}>
+                        {/* Status Ribbon */}
+                        <div className="absolute top-6 -left-3 z-10">
+                          {row.status === 'NEW' ? (
+                            <div className="px-3 py-1 bg-emerald-500 text-black text-[9px] font-black rounded-lg shadow-lg rotate-[-4deg] uppercase tracking-tighter">New Entry</div>
+                          ) : row.status === 'MISSING' ? (
+                            <div className="px-3 py-1 bg-rose-500 text-white text-[9px] font-black rounded-lg shadow-lg rotate-[-4deg] uppercase tracking-tighter">Not Pasted</div>
+                          ) : isModified ? (
+                            <div className="px-3 py-1 bg-[#F59E0B] text-black text-[9px] font-black rounded-lg shadow-lg rotate-[-4deg] uppercase tracking-tighter">Updates Detected</div>
+                          ) : (
+                            <div className="px-3 py-1 bg-white/10 text-white/40 text-[9px] font-black rounded-lg shadow-lg rotate-[-4deg] uppercase tracking-tighter border border-white/5 backdrop-blur-md">Unified</div>
+                          )}
+                        </div>
+
+                        {/* Card Content */}
+                        <div className="p-8">
+                           {/* Row Header */}
+                           <div className="flex items-start justify-between mb-8">
+                              <div className="flex items-start gap-4">
+                                <span className="mt-1 text-2xl font-black text-white/5 font-mono tracking-tighter leading-none">{row.key?.padStart(2, '0') || '??'}</span>
+                                <div>
+                                  <h4 className="text-sm font-black text-white/90 leading-tight group-hover/row:text-[#F59E0B] transition-colors">
+                                    {(row.existing?.Description || row.new?.Description || 'N/A').toUpperCase()}
+                                  </h4>
+                                  <div className="flex items-center gap-4 mt-2">
+                                    <span className="text-[10px] text-white/20 font-bold font-mono tracking-widest">{row.existing?.['Item Code'] || row.new?.['Item Code'] || 'NO SYSTEM CODE'}</span>
+                                    {row.existing?._versionUsed > 0 && (
+                                      <span className="text-[9px] px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md font-black uppercase tracking-tighter">v{row.existing._versionUsed} Active</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              {!isModified && row.status === 'MATCHED' && (
+                                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl text-emerald-400 text-[10px] font-black uppercase tracking-widest">
+                                  <IconCheck size={14} /> Perfect Match
+                                </div>
+                              )}
+                           </div>
+
+                           {/* Two Column Layout */}
+                           <div className="grid grid-cols-2 gap-8 relative">
+                              <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/5 -translate-x-1/2" />
+                              
+                              {/* LEFT: Current DB Version */}
+                              <div className="space-y-4">
+                                <div className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" /> Current Version
+                                </div>
+                                <div className="grid grid-cols-3 gap-6">
+                                  {['Qty', 'Rate', 'Total'].map(f => (
+                                    <div key={f}>
+                                      <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
+                                      <p className="text-sm font-black text-white/60 font-mono transition-colors group-hover/row:text-white/80">{row.existing ? (row.existing[f] || '0.00') : 'â€”'}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* RIGHT: New Pasted */}
+                              <div className="pl-8 space-y-4">
+                                <div className="text-[9px] font-black text-[#F59E0B]/40 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]/50" /> New Pasted
+                                </div>
+                                <div className="grid grid-cols-3 gap-6">
+                                  {['Qty', 'Rate', 'Total'].map(f => {
+                                    const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
+                                    const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
+                                    const diff = valN - valE;
+                                    const changed = Math.abs(diff) > 0.01;
+                                    
+                                    let textColor = 'text-white/80';
+                                    if (changed) {
+                                      if (f === 'Rate' || f === 'Total') textColor = diff > 0 ? 'text-rose-400' : 'text-emerald-400';
+                                      else textColor = 'text-blue-400';
+                                    }
+
+                                    return (
+                                      <div key={f}>
+                                        <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
+                                        <p className={`text-sm font-black font-mono ${textColor}`}>{row.new ? (row.new[f] || '0.00') : 'â€”'}</p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                           </div>
+
+                           {/* DIFF Section (only if modified or removal) */}
+                           {isModified && (
+                              <div className="mt-8 pt-6 border-t border-white/5 flex items-center gap-12 bg-white/[0.01] -mx-8 -mb-8 px-8 pb-8 rounded-b-3xl">
+                                {['Qty', 'Rate', 'Total'].map(f => {
+                                  if (!diffFields.includes(f) && f !== 'Total') return null;
+                                  const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
+                                  const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
+                                  const diff = valN - valE;
+                                  const pct = calculatePercentChange(valE, valN);
+                                  const isIncrease = diff > 0;
+                                  const isDecreasing = diff < 0;
+
+                                  return (
+                                    <div key={f} className="flex items-center gap-3">
+                                      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">{f} Î”</div>
+                                      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black font-mono ${
+                                        f === 'Qty' ? 'bg-blue-500/10 text-blue-400' :
+                                        isIncrease ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
+                                      }`}>
+                                        {diff > 0 ? '+' : ''}{diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        <span className="opacity-60 text-[9px]">({pct})</span>
+                                        {isIncrease ? <IconArrowUpRight size={12} className="rotate-0" /> : isDecreasing ? <IconArrowUpRight size={12} className="rotate-90" /> : null}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                           )}
+                        </div>
+                     </div>
+                   </div>
+                 );
+              })}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-10 border-t border-[rgba(255,255,255,0.03)] bg-[#0a0f18] flex items-center justify-between">
+               <div className="flex items-center gap-8">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{comparisonModal.data.filter(r => r.existing && r.new && ['Qty', 'Rate', 'Total'].some(f => Math.abs(parseFloat(String(r.existing[f] || '0').replace(/,/g, '')) - parseFloat(String(r.new[f] || '0').replace(/,/g, ''))) > 0.01)).length} Updated</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{comparisonModal.data.filter(r => r.status === 'NEW').length} New</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{comparisonModal.data.filter(r => r.status === 'MISSING').length} Removed</span>
+                  </div>
+               </div>
+               <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setComparisonModal({ ...comparisonModal, show: false })}
+                    className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-3xl text-xs font-black uppercase tracking-widest transition-all"
+                  >
+                    Discard Changes
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setComparisonModal({ ...comparisonModal, show: false });
+                      setToast({ message: "Comparison verified. Changes accepted.", type: "success" });
+                    }}
+                    className="px-10 py-4 bg-gradient-to-r from-[#F59E0B] to-[#D97706] text-black shadow-[0_20px_40px_rgba(245,158,11,0.2)] rounded-3xl text-xs font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    Apply Reconciliation
+                  </button>
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes slideDown {
           from { opacity: 0; transform: translateY(-10px); }
@@ -2185,11 +3434,12 @@ const POLog = () => {
           from { opacity: 0; transform: scale(0.95); }
           to { opacity: 1; transform: scale(1); }
         }
-        .animate-slide-down {
-          animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        @keyframes slideInRow {
+          from { opacity: 0; transform: translateX(-20px); }
+          to { opacity: 1; transform: translateX(0); }
         }
-        .animate-zoom-in {
-          animation: zoomIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        .animate-slide-in-row {
+          animation: slideInRow 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
       `}} />
     </div>

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { IconRefresh } from '@tabler/icons-react';
 import { 
   Users, 
   TrendingUp, 
@@ -11,6 +12,7 @@ import {
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { supplierComparisonData } from '../../data/mockData';
 import { SearchBar } from '../ui/search-bar';
+import { processPRItems } from '../../utils/prUtils';
 
 const VendorCard = ({ name, totalSpend, avgPrice, reliability, items, index }) => (
   <div 
