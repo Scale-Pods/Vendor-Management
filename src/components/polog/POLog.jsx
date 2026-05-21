@@ -322,6 +322,7 @@ const POLog = () => {
   const [materialDetailRows, setMaterialDetailRows] = useState([]);
   const [isComparing, setIsComparing] = useState(false);
   const [comparisonModal, setComparisonModal] = useState({ show: false, prRef: null, data: [], isLive: true, remarks: '' });
+  const [cachedRemarks, setCachedRemarks] = useState({});
   const [comparisonCache, setComparisonCache] = useState({}); // { [prRef]: { data, isLive: boolean } }
   const comparisonLoadingRef = useRef(new Set()); // Tracks PRs currently being fetched to avoid duplicates
   const [rateSummaryMap, setRateSummaryMap] = useState({}); // { [prRef]: { subtotal, discount, charges, net, manualTotal } }
@@ -1242,6 +1243,7 @@ const POLog = () => {
           po_step_1: enrichedStep1,
           materials_step_2: materialRows,
           material_details_step_3: enrichedDetails,
+          reconciliation_remarks: cachedRemarks,
         }),
       });
 
@@ -3423,36 +3425,20 @@ const POLog = () => {
                     Discard Changes
                   </button>
                   <button 
-                    onClick={async () => {
-                      try {
-                        const payload = {
-                          prRef: comparisonModal.prRef,
-                          data: comparisonModal.data,
-                          remarks: comparisonModal.remarks,
-                          timestamp: new Date().toISOString(),
-                          isLive: comparisonModal.isLive
-                        };
-                        
-                        const response = await fetch(COMPARE_WEBHOOK, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(payload)
+                    onClick={() => {
+                      // Save remarks to cache for this PR reference
+                      if (comparisonModal.prRef) {
+                        setCachedRemarks({
+                          ...cachedRemarks,
+                          [comparisonModal.prRef]: comparisonModal.remarks
                         });
-                        
-                        if (response.ok) {
-                          setComparisonModal({ show: false, prRef: null, data: [], isLive: true, remarks: '' });
-                          setToast({ message: "Reconciliation applied successfully with remarks.", type: "success" });
-                        } else {
-                          setToast({ message: "Failed to apply reconciliation.", type: "error" });
-                        }
-                      } catch (error) {
-                        console.error("[v0] Reconciliation error:", error);
-                        setToast({ message: "Error applying reconciliation.", type: "error" });
                       }
+                      setComparisonModal({ show: false, prRef: null, data: [], isLive: true, remarks: '' });
+                      setToast({ message: "Reconciliation verified. Remarks saved.", type: "success" });
                     }}
                     className="px-10 py-4 bg-gradient-to-r from-[#F59E0B] to-[#D97706] text-black shadow-[0_20px_40px_rgba(245,158,11,0.2)] rounded-3xl text-xs font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]"
                   >
-                    Apply Reconciliation
+                    Verify
                   </button>
                </div>
             </div>
