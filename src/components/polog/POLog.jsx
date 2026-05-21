@@ -3213,7 +3213,7 @@ const POLog = () => {
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 sm:p-12">
           <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl animate-fade-in" onClick={() => setComparisonModal({ ...comparisonModal, show: false })} />
           
-          <div className="relative w-full max-w-7xl max-h-[92vh] bg-[#080c14] rounded-[40px] border border-[rgba(245,158,11,0.15)] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-zoom-in">
+          <div className="relative w-full max-w-7xl mx-auto max-h-[92vh] bg-[#080c14] rounded-[40px] border border-[rgba(245,158,11,0.15)] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-zoom-in">
             {/* Header */}
             <div className="p-10 border-b border-[rgba(245,158,11,0.05)] flex items-center justify-between bg-gradient-to-b from-[#0e1420] to-[#080c14]">
               <div className="flex items-center gap-6">
