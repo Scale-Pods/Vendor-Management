@@ -324,6 +324,8 @@ const POLog = () => {
   const [comparisonModal, setComparisonModal] = useState({ show: false, prRef: null, data: [], isLive: true });
   const [comparisonCache, setComparisonCache] = useState({}); // { [prRef]: { data, isLive: boolean } }
   const comparisonLoadingRef = useRef(new Set()); // Tracks PRs currently being fetched to avoid duplicates
+  const [reconRemarks, setReconRemarks] = useState({}); // { [prRef]: { [rowKey]: string } }
+  const [remarksInput, setRemarksInput] = useState({}); // { [rowKey]: string } — temp state inside comparison modal
   const [rateSummaryMap, setRateSummaryMap] = useState({}); // { [prRef]: { subtotal, discount, charges, net, manualTotal } }
   const [isImporting, setIsImporting] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1240,7 +1242,15 @@ const POLog = () => {
         body: JSON.stringify({
           action: 'import_po_log',
           po_step_1: enrichedStep1,
-          materials_step_2: materialRows,
+          materials_step_2: materialRows.map(row => {
+            const prNorm = (row['PR'] || row.pr || '').toString().trim().toUpperCase();
+            const srNo = (row['Sr.No'] || '').toString().trim();
+            const matchedPr = Object.keys(reconRemarks).find(
+              k => k.toString().trim().toUpperCase() === prNorm
+            );
+            const remark = matchedPr ? (reconRemarks[matchedPr][srNo] || '') : '';
+            return remark ? { ...row, Remark: remark } : row;
+          }),
           material_details_step_3: enrichedDetails,
         }),
       });
@@ -3235,7 +3245,7 @@ const POLog = () => {
                    {comparisonModal.isLive ? 'Live Sync' : 'Cached Data'}
                 </div>
                 <button 
-                  onClick={() => setComparisonModal({ ...comparisonModal, show: false })}
+                  onClick={() => { setRemarksInput({}); setComparisonModal({ ...comparisonModal, show: false }); }}
                   className="p-3 hover:bg-white/5 rounded-2xl transition-all text-[rgba(255,255,255,0.3)] hover:text-white group"
                 >
                   <IconX size={24} className="group-hover:rotate-90 transition-transform duration-300" />
@@ -3253,6 +3263,8 @@ const POLog = () => {
                    return Math.abs(valE - valN) > 0.01;
                  });
                  const isModified = diffFields.length > 0;
+                 const needsRemark = isModified || row.status === 'NEW';
+                 const remarkKey = row.key || String(idx);
                  
                  return (
                    <div key={idx} 
@@ -3316,7 +3328,7 @@ const POLog = () => {
                                   {['Qty', 'Rate', 'Total'].map(f => (
                                     <div key={f}>
                                       <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
-                                      <p className="text-sm font-black text-white/60 font-mono transition-colors group-hover/row:text-white/80">{row.existing ? (row.existing[f] || '0.00') : 'â€”'}</p>
+                                      <p className="text-sm font-black text-white/60 font-mono transition-colors group-hover/row:text-white/80">{row.existing ? (row.existing[f] || '0.00') : '—'}</p>
                                     </div>
                                   ))}
                                 </div>
@@ -3343,7 +3355,7 @@ const POLog = () => {
                                     return (
                                       <div key={f}>
                                         <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
-                                        <p className={`text-sm font-black font-mono ${textColor}`}>{row.new ? (row.new[f] || '0.00') : 'â€”'}</p>
+                                        <p className={`text-sm font-black font-mono ${textColor}`}>{row.new ? (row.new[f] || '0.00') : '—'}</p>
                                       </div>
                                     );
                                   })}
@@ -3353,7 +3365,7 @@ const POLog = () => {
 
                            {/* DIFF Section (only if modified or removal) */}
                            {isModified && (
-                              <div className="mt-8 pt-6 border-t border-white/5 flex items-center gap-12 bg-white/[0.01] -mx-8 -mb-8 px-8 pb-8 rounded-b-3xl">
+                              <div className="mt-8 pt-6 border-t border-white/5 flex items-center flex-wrap gap-x-8 gap-y-4 bg-white/[0.01] -mx-8 px-8 pb-6 rounded-b-none">
                                 {['Qty', 'Rate', 'Total'].map(f => {
                                   if (!diffFields.includes(f) && f !== 'Total') return null;
                                   const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
@@ -3365,7 +3377,7 @@ const POLog = () => {
 
                                   return (
                                     <div key={f} className="flex items-center gap-3">
-                                      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">{f} Î”</div>
+                                      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">{f} Δ</div>
                                       <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black font-mono ${
                                         f === 'Qty' ? 'bg-blue-500/10 text-blue-400' :
                                         isIncrease ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
@@ -3378,6 +3390,31 @@ const POLog = () => {
                                   );
                                 })}
                               </div>
+                           )}
+
+                           {/* ── REMARK SECTION (shown only where there is a change) ── */}
+                           {needsRemark && (
+                             <div className={`${isModified ? '-mx-8 -mb-8 px-8 pb-8' : 'mt-6'} pt-5 border-t border-[rgba(245,158,11,0.08)] bg-[rgba(245,158,11,0.02)] ${isModified ? '' : 'rounded-b-3xl -mx-8 -mb-8 px-8 pb-8'}`}>
+                               <div className="flex items-center gap-2 mb-3">
+                                 <div className="w-1 h-4 rounded-full bg-[#F59E0B]/60" />
+                                 <label className="text-[9px] font-black text-[#F59E0B]/60 uppercase tracking-[0.2em]">
+                                   Reconciliation Remark
+                                   {remarksInput[remarkKey] && (
+                                     <span className="ml-2 text-[#F59E0B] text-[8px] normal-case tracking-normal">(saved on Apply)</span>
+                                   )}
+                                 </label>
+                               </div>
+                               <textarea
+                                 value={remarksInput[remarkKey] || ''}
+                                 onChange={(e) => setRemarksInput(prev => ({ ...prev, [remarkKey]: e.target.value }))}
+                                 placeholder={isModified
+                                   ? `Explain the change in ${diffFields.join(', ')} for Sr.No ${remarkKey}…`
+                                   : `Add a remark for this new item (Sr.No ${remarkKey})…`
+                                 }
+                                 rows={2}
+                                 className="w-full bg-[rgba(255,255,255,0.03)] border border-[rgba(245,158,11,0.15)] focus:border-[rgba(245,158,11,0.4)] rounded-2xl px-5 py-3.5 text-[12px] text-white/80 placeholder:text-white/20 outline-none resize-none transition-all font-medium leading-relaxed"
+                               />
+                             </div>
                            )}
                         </div>
                      </div>
@@ -3401,18 +3438,49 @@ const POLog = () => {
                     <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                     <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{comparisonModal.data.filter(r => r.status === 'MISSING').length} Removed</span>
                   </div>
+                  {/* Live remark count badge */}
+                  {Object.values(remarksInput).filter(Boolean).length > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] rounded-xl">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] animate-pulse" />
+                      <span className="text-[10px] font-black text-[#F59E0B] uppercase tracking-widest">
+                        {Object.values(remarksInput).filter(Boolean).length} Remark{Object.values(remarksInput).filter(Boolean).length > 1 ? 's' : ''} Added
+                      </span>
+                    </div>
+                  )}
                </div>
                <div className="flex items-center gap-4">
                   <button 
-                    onClick={() => setComparisonModal({ ...comparisonModal, show: false })}
+                    onClick={() => {
+                      setRemarksInput({});
+                      setComparisonModal({ ...comparisonModal, show: false });
+                    }}
                     className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-3xl text-xs font-black uppercase tracking-widest transition-all"
                   >
                     Discard Changes
                   </button>
                   <button 
                     onClick={() => {
+                      // Persist all filled remarks into reconRemarks under this PR
+                      const prRef = comparisonModal.prRef;
+                      const filledRemarks = Object.entries(remarksInput).reduce((acc, [k, v]) => {
+                        if (v && v.trim()) acc[k] = v.trim();
+                        return acc;
+                      }, {});
+                      if (Object.keys(filledRemarks).length > 0) {
+                        setReconRemarks(prev => ({
+                          ...prev,
+                          [prRef]: { ...(prev[prRef] || {}), ...filledRemarks }
+                        }));
+                      }
+                      setRemarksInput({});
                       setComparisonModal({ ...comparisonModal, show: false });
-                      setToast({ message: "Comparison verified. Changes accepted.", type: "success" });
+                      const remarkCount = Object.keys(filledRemarks).length;
+                      setToast({
+                        message: remarkCount > 0
+                          ? `Reconciliation applied · ${remarkCount} remark${remarkCount > 1 ? 's' : ''} saved`
+                          : 'Comparison verified. Changes accepted.',
+                        type: 'success'
+                      });
                     }}
                     className="px-10 py-4 bg-gradient-to-r from-[#F59E0B] to-[#D97706] text-black shadow-[0_20px_40px_rgba(245,158,11,0.2)] rounded-3xl text-xs font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]"
                   >
