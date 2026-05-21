@@ -91,7 +91,7 @@ const ReviewDashboard = () => {
 
         // 2. Fallback to n8n if Supabase is empty/not configured
         console.log('Supabase empty or missing, falling back to n8n...');
-        const n8nUrl = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO%20Data`;
+        const n8nUrl = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO Data`;
         const response = await fetch(n8nUrl);
         const json = await response.json();
         

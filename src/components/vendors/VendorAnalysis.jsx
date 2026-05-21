@@ -65,7 +65,7 @@ const VendorAnalysis = () => {
     const fetchVendors = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
+        const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
         const json = await response.json();
         let rawItems = [];
         if (Array.isArray(json)) {

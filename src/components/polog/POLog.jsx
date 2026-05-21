@@ -102,9 +102,9 @@ const DETAIL_COLUMNS = [
 // Bypassing 18: PDF Rpt, 19: PDF Rpt No Appr.
 const STRIP_INDICES = new Set([18, 19]);
 
-const IMPORT_WEBHOOK = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/552d22ef-17fd-4dfd-b4d5-dfce6624c5f6`;
-const FETCH_WEBHOOK = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO%20Data`;
-const COMPARE_WEBHOOK = `https://n8n.srv1010832.hstgr.cloud/webhook/d0456a7b-66b8-4a06-a838-934451ee34dc`;
+const IMPORT_WEBHOOK = `/api/n8n/webhook/552d22ef-17fd-4dfd-b4d5-dfce6624c5f6`;
+const FETCH_WEBHOOK = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO%20Data`;
+const COMPARE_WEBHOOK = `/api/n8n/webhook/d0456a7b-66b8-4a06-a838-934451ee34dc`;
 
 const PAGE_SIZE = 50;
 
@@ -407,7 +407,7 @@ const POLog = () => {
     setPrError(prev => ({ ...prev, [ref]: null }));
 
     try {
-      const url = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/b47de351-0c89-466a-9098-29f0eaa590ae?pr=${encodeURIComponent(prRef)}`;
+      const url = `/api/n8n/webhook/b47de351-0c89-466a-9098-29f0eaa590ae?pr=${encodeURIComponent(prRef)}`;
       const response = await fetch(url);
 
       if (!response.ok) {

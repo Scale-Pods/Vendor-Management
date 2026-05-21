@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { IconSearch, IconRefresh, IconArrowRight, IconCalendar, IconX } from '@tabler/icons-react';
 import Overview from './Overview';
 import BoxLoader from '../ui/BoxLoader';
@@ -10,14 +10,10 @@ const ReviewYear = ({ year, action }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAuditPR, setSelectedAuditPR] = useState(null);
 
-  useEffect(() => {
-    fetchData();
-  }, [action]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${action}`);
+      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${action}`);
       const result = await response.json();
       const records = Array.isArray(result) ? result : result.data || [];
       setData(records);
@@ -26,7 +22,11 @@ const ReviewYear = ({ year, action }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [action]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const filteredData = data.filter(item => 
     Object.values(item).some(val => 

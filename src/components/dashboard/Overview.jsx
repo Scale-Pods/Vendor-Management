@@ -201,7 +201,7 @@ const Overview = ({ initialPR, isModalMode }) => {
     setIsVerificationMode(false);
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/813fa9e5-144b-4f95-8f31-2a5c6f064d4a?action=Check&poNumber=${activePo}`);
+      const response = await fetch(`/api/n8n/webhook/813fa9e5-144b-4f95-8f31-2a5c6f064d4a?action=Check&poNumber=${activePo}`);
       if (response.ok) {
         let rawData = await response.json();
         let parsedData = rawData;
@@ -258,7 +258,7 @@ const Overview = ({ initialPR, isModalMode }) => {
     if (isModalMode) return;
     setIsLoadingStats(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${filters.year}`);
+      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${filters.year}`);
       const json = await response.json();
       let rawItems = [];
       if (Array.isArray(json)) {
@@ -297,7 +297,7 @@ const Overview = ({ initialPR, isModalMode }) => {
     setIsAIVerifying(true);
     try {
       // Send both system data and the messy pasted data to the AI Backend
-      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/d1e09ad3-413a-43f1-a431-b4a98549bcec`, {
+      const response = await fetch(`/api/n8n/webhook/d1e09ad3-413a-43f1-a431-b4a98549bcec`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -455,7 +455,7 @@ const Overview = ({ initialPR, isModalMode }) => {
         wholePR: checkResult.materials
       };
 
-      const response = await fetch(`${import.meta.env.VITE_N8N_WEBHOOK_BASE}/bb14054d-e9aa-428b-8d27-3a04cf9d78fd`, {
+      const response = await fetch(`/api/n8n/webhook/bb14054d-e9aa-428b-8d27-3a04cf9d78fd`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

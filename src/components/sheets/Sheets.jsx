@@ -32,7 +32,7 @@ const Sheets = () => {
       setLoading(true);
       setRawData([]);
       try {
-        const url = `${import.meta.env.VITE_N8N_WEBHOOK_BASE}/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=${encodeURIComponent(activeTab)}`;
+        const url = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=${encodeURIComponent(activeTab)}`;
         const response = await fetch(url);
         const json = await response.json();
 
