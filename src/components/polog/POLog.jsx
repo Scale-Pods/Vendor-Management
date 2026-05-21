@@ -1235,6 +1235,18 @@ const POLog = () => {
         return clean;
       });
 
+      // Add remarks to material_details_step_3 items
+      const detailsWithRemarks = enrichedDetails.map(detail => {
+        const prRef = detail._prRef || '';
+        if (cachedRemarks[prRef]) {
+          return {
+            ...detail,
+            remark: cachedRemarks[prRef]
+          };
+        }
+        return detail;
+      });
+
       const response = await fetch(IMPORT_WEBHOOK, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1242,8 +1254,7 @@ const POLog = () => {
           action: 'import_po_log',
           po_step_1: enrichedStep1,
           materials_step_2: materialRows,
-          material_details_step_3: enrichedDetails,
-          reconciliation_remarks: cachedRemarks,
+          material_details_step_3: detailsWithRemarks,
         }),
       });
 
