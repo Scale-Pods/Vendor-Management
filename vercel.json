@@ -1,8 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/api/n8n/(.*)",
-      "destination": "https://n8n.srv1010832.hstgr.cloud/webhook/$1"
+      "source": "/api/n8n/webhook/:path*",
+      "destination": "https://n8n.srv1010832.hstgr.cloud/webhook/:path*"
+    },
+    {
+      "source": "/api/n8n/:path*",
+      "destination": "https://n8n.srv1010832.hstgr.cloud/:path*"
     },
     {
       "source": "/(.*)",
