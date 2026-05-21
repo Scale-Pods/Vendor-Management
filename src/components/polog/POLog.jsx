@@ -321,7 +321,7 @@ const POLog = () => {
   const [materialRows, setMaterialRows] = useState([]);
   const [materialDetailRows, setMaterialDetailRows] = useState([]);
   const [isComparing, setIsComparing] = useState(false);
-  const [comparisonModal, setComparisonModal] = useState({ show: false, prRef: null, data: [], isLive: true, remarks: '' });
+  const [comparisonModal, setComparisonModal] = useState({ show: false, prRef: null, data: [], isLive: true, remarks: {} });
   const [cachedRemarks, setCachedRemarks] = useState({});
   const [comparisonCache, setComparisonCache] = useState({}); // { [prRef]: { data, isLive: boolean } }
   const comparisonLoadingRef = useRef(new Set()); // Tracks PRs currently being fetched to avoid duplicates
@@ -1235,16 +1235,24 @@ const POLog = () => {
         return clean;
       });
 
-      // Add remarks to material_details_step_3 items
-      const detailsWithRemarks = enrichedDetails.map(detail => {
-        const prRef = detail._prRef || '';
-        if (cachedRemarks[prRef]) {
+      // Add remarks to materials_step_2 items
+      const materialsWithRemarks = materialRows.map((material, idx) => {
+        // Check if this material row has remarks from any PR comparison
+        let remark = '';
+        for (const prRef in cachedRemarks) {
+          if (cachedRemarks[prRef][idx]) {
+            remark = cachedRemarks[prRef][idx];
+            break;
+          }
+        }
+        
+        if (remark) {
           return {
-            ...detail,
-            remark: cachedRemarks[prRef]
+            ...material,
+            remark: remark
           };
         }
-        return detail;
+        return material;
       });
 
       const response = await fetch(IMPORT_WEBHOOK, {
@@ -1253,8 +1261,8 @@ const POLog = () => {
         body: JSON.stringify({
           action: 'import_po_log',
           po_step_1: enrichedStep1,
-          materials_step_2: materialRows,
-          material_details_step_3: detailsWithRemarks,
+          materials_step_2: materialsWithRemarks,
+          material_details_step_3: enrichedDetails,
         }),
       });
 
@@ -3366,30 +3374,48 @@ const POLog = () => {
 
                            {/* DIFF Section (only if modified or removal) */}
                            {isModified && (
-                              <div className="mt-8 pt-6 border-t border-white/5 flex items-center gap-12 bg-white/[0.01] -mx-8 -mb-8 px-8 pb-8 rounded-b-3xl">
-                                {['Qty', 'Rate', 'Total'].map(f => {
-                                  if (!diffFields.includes(f) && f !== 'Total') return null;
-                                  const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
-                                  const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
-                                  const diff = valN - valE;
-                                  const pct = calculatePercentChange(valE, valN);
-                                  const isIncrease = diff > 0;
-                                  const isDecreasing = diff < 0;
+                              <div className="mt-8 pt-6 border-t border-white/5 bg-white/[0.01] -mx-8 -mb-8 px-8 pb-8 rounded-b-3xl">
+                                <div className="flex items-start justify-between gap-8">
+                                  <div className="flex items-center gap-12">
+                                    {['Qty', 'Rate', 'Total'].map(f => {
+                                      if (!diffFields.includes(f) && f !== 'Total') return null;
+                                      const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
+                                      const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
+                                      const diff = valN - valE;
+                                      const pct = calculatePercentChange(valE, valN);
+                                      const isIncrease = diff > 0;
+                                      const isDecreasing = diff < 0;
 
-                                  return (
-                                    <div key={f} className="flex items-center gap-3">
-                                      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">{f} Î”</div>
-                                      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black font-mono ${
-                                        f === 'Qty' ? 'bg-blue-500/10 text-blue-400' :
-                                        isIncrease ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
-                                      }`}>
-                                        {diff > 0 ? '+' : ''}{diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                        <span className="opacity-60 text-[9px]">({pct})</span>
-                                        {isIncrease ? <IconArrowUpRight size={12} className="rotate-0" /> : isDecreasing ? <IconArrowUpRight size={12} className="rotate-90" /> : null}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                                      return (
+                                        <div key={f} className="flex items-center gap-3">
+                                          <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">{f} Î"</div>
+                                          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black font-mono ${
+                                            f === 'Qty' ? 'bg-blue-500/10 text-blue-400' :
+                                            isIncrease ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
+                                          }`}>
+                                            {diff > 0 ? '+' : ''}{diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            <span className="opacity-60 text-[9px]">({pct})</span>
+                                            {isIncrease ? <IconArrowUpRight size={12} className="rotate-0" /> : isDecreasing ? <IconArrowUpRight size={12} className="rotate-90" /> : null}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Remark Input for Modified Materials */}
+                                  <div className="flex-1 min-w-[250px]">
+                                    <input
+                                      type="text"
+                                      placeholder="Add remark..."
+                                      value={comparisonModal.remarks[idx] || ''}
+                                      onChange={(e) => setComparisonModal({
+                                        ...comparisonModal,
+                                        remarks: { ...comparisonModal.remarks, [idx]: e.target.value }
+                                      })}
+                                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs placeholder-white/30 focus:outline-none focus:border-[#F59E0B]/50 focus:bg-white/[0.08] transition-all"
+                                    />
+                                  </div>
+                                </div>
                               </div>
                            )}
                         </div>
@@ -3416,19 +3442,7 @@ const POLog = () => {
                   </div>
                </div>
 
-               {/* Remarks Section */}
-               <div className="mt-8 pt-8 border-t border-[rgba(245,158,11,0.05)]">
-                  <label className="block text-xs font-black text-white/60 uppercase tracking-widest mb-3">Add Remarks (Optional)</label>
-                  <textarea
-                    value={comparisonModal.remarks}
-                    onChange={(e) => setComparisonModal({ ...comparisonModal, remarks: e.target.value })}
-                    placeholder="Enter any additional notes or remarks about this reconciliation..."
-                    className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#F59E0B]/50 focus:bg-white/[0.08] transition-all resize-none"
-                    rows={4}
-                  />
-               </div>
-
-               <div className="flex items-center gap-4 mt-8">
+               <div className="flex items-center gap-4">
                   <button 
                     onClick={() => setComparisonModal({ ...comparisonModal, show: false })}
                     className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-3xl text-xs font-black uppercase tracking-widest transition-all"
@@ -3437,14 +3451,14 @@ const POLog = () => {
                   </button>
                   <button 
                     onClick={() => {
-                      // Save remarks to cache for this PR reference
-                      if (comparisonModal.prRef) {
+                      // Save remarks to cache keyed by material row index
+                      if (comparisonModal.prRef && Object.keys(comparisonModal.remarks).length > 0) {
                         setCachedRemarks({
                           ...cachedRemarks,
                           [comparisonModal.prRef]: comparisonModal.remarks
                         });
                       }
-                      setComparisonModal({ show: false, prRef: null, data: [], isLive: true, remarks: '' });
+                      setComparisonModal({ show: false, prRef: null, data: [], isLive: true, remarks: {} });
                       setToast({ message: "Reconciliation verified. Remarks saved.", type: "success" });
                     }}
                     className="px-10 py-4 bg-gradient-to-r from-[#F59E0B] to-[#D97706] text-black shadow-[0_20px_40px_rgba(245,158,11,0.2)] rounded-3xl text-xs font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]"
