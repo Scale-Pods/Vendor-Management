@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  IconX, IconClock, IconLayoutColumns, IconList, IconTableExport, IconHash
+  IconX, IconClock, IconLayoutColumns, IconList, IconTableExport, IconHash, IconDownload
 } from '@tabler/icons-react';
 import BoxLoader from '../ui/BoxLoader';
+import { downloadXLSX } from '../../utils/exportXLSX';
 
 /* ─── Table-specific column schemas ─── */
 const TABLE_SCHEMAS = {
@@ -11,10 +12,11 @@ const TABLE_SCHEMAS = {
   'material_detail_26': ['PR', 'Sr_No', 'Project', 'Description', 'change1_rate', 'change1_total', 'change1_supplier', 'change2_rate', 'change2_total', 'change2_supplier'],
   'pr_data_25': ['Sr.No', 'Project', 'PR', 'Previous Charges', 'Current Charges', 'Remark', 'Status'],
   'pr_data_26': ['Sr.No', 'Project', 'PR', 'Previous Charges', 'Current Charges', 'Remark', 'Status'],
-  'purchase_orders': ['PR', 'Sr_No', 'Project', 'Description', 'UOM', 'Req_Qty', 'change1_rate', 'change1_total', 'change1_supplier']
+  'purchase_orders': ['PR', 'Sr_No', 'Project', 'Description', 'UOM', 'Req_Qty', 'change1_rate', 'change1_total', 'change1_supplier'],
+  'merged': ['PR', 'Sr_No', 'Project', 'Description', 'UOM', 'Req_Qty', 'change1_rate', 'change1_total', 'change1_supplier', 'change2_rate', 'change2_total', 'change2_supplier', 'Status', 'Remark']
 };
 
-const TABS = ['PO Data', 'material_detail_25', 'material_detail_26', 'pr_data_25', 'pr_data_26', 'purchase_orders'];
+const TABS = ['PO Data', 'material_detail_25', 'material_detail_26', 'pr_data_25', 'pr_data_26', 'purchase_orders', 'merged'];
 
 /* ─── Main Sheets Component ─── */
 const Sheets = () => {
@@ -203,23 +205,44 @@ const Sheets = () => {
           </div>
         </div>
 
-        {/* Sort Toggle */}
-        <button
-          onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
-          style={{
-            fontSize: '10px',
-            fontWeight: 900,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            background: sortOrder === 'desc' ? '#c8922a' : 'rgba(200,146,42,0.1)',
-            color: sortOrder === 'desc' ? '#000' : '#c8922a',
-            border: `1px solid ${sortOrder === 'desc' ? '#c8922a' : 'rgba(200,146,42,0.25)'}`,
-          }}
-        >
-          <IconClock size={13} />
-          {sortOrder === 'asc' ? 'OLDEST FIRST' : 'LATEST FIRST'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Download XLSX */}
+          <button
+            onClick={() => downloadXLSX(rawData, `${activeTab.replace(/_/g, '_')}.xlsx`)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              fontSize: '10px',
+              fontWeight: 900,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              background: 'rgba(0,200,100,0.1)',
+              color: '#00c864',
+              border: '1px solid rgba(0,200,100,0.25)',
+            }}
+            title={`Download ${activeTab.replace(/_/g, ' ')} as Excel`}
+          >
+            <IconDownload size={13} />
+            DOWNLOAD EXCEL
+          </button>
+
+          {/* Sort Toggle */}
+          <button
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              fontSize: '10px',
+              fontWeight: 900,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              background: sortOrder === 'desc' ? '#c8922a' : 'rgba(200,146,42,0.1)',
+              color: sortOrder === 'desc' ? '#000' : '#c8922a',
+              border: `1px solid ${sortOrder === 'desc' ? '#c8922a' : 'rgba(200,146,42,0.25)'}`,
+            }}
+          >
+            <IconClock size={13} />
+            {sortOrder === 'asc' ? 'OLDEST FIRST' : 'LATEST FIRST'}
+          </button>
+        </div>
       </div>
 
       {/* ─── Table Area ─── */}

@@ -331,6 +331,12 @@ const POLog = () => {
   const [toast, setToast] = useState(null);
   const textareaRef = useRef(null);
 
+  // Refs for material rows to ensure handleCompareWithExisting always uses fresh data
+  const materialRowsRef = useRef(materialRows);
+  const materialDetailRowsRef = useRef(materialDetailRows);
+  useEffect(() => { materialRowsRef.current = materialRows; }, [materialRows]);
+  useEffect(() => { materialDetailRowsRef.current = materialDetailRows; }, [materialDetailRows]);
+
   // Dialog and Countdown
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [dialogCountdown, setDialogCountdown] = useState(2);
@@ -778,10 +784,14 @@ const POLog = () => {
       // Strip columns at indices 17, 18, 19, 20 (Attachments, PDF, PDF Rpt, PDF Rpt No Appr)
       const filtered = rawCells.filter((_, idx) => !STRIP_INDICES.has(idx));
 
-      // Map to PO_COLUMNS positionally
       const rowObj = {};
       PO_COLUMNS.forEach((col, i) => {
-        rowObj[col] = (filtered[i] || '').trim();
+        let val = (filtered[i] || '').trim();
+        if (col === 'Sr.No' && val && !isNaN(val.replace(/,/g, ''))) {
+          const num = parseInt(val.replace(/,/g, ''));
+          if (!isNaN(num)) val = num;
+        }
+        rowObj[col] = val;
       });
 
       // Skip fully empty rows
@@ -937,9 +947,14 @@ const POLog = () => {
 
     // Map the extracted materials to the final materialRows format
     const newMaterialRows = extractedMaterials.map(mat => {
+      let finalSrNo = mat.srNo;
+      if (finalSrNo && !isNaN(String(finalSrNo).replace(/,/g, ''))) {
+        const num = parseInt(String(finalSrNo).replace(/,/g, ''));
+        if (!isNaN(num)) finalSrNo = num;
+      }
 
-      return {
-        'Sr.No': mat.srNo,
+      const rowObj = {
+        'Sr.No': finalSrNo,
         'Item Code': mat.itemCode,
         'Description': mat.description,
         'Class': mat.className,
@@ -954,6 +969,7 @@ const POLog = () => {
         'Total': mat.total,
         'PR': mat.prRef,
       };
+      return rowObj;
     });
 
     const summary = {};
@@ -1028,7 +1044,12 @@ const POLog = () => {
         
         // Initial mapping based on standard indices
         DETAIL_COLUMNS.forEach((col, i) => {
-          rowObj[col] = cells[i] || '';
+          let val = cells[i] || '';
+          if (col === 'Seq #' && val && !isNaN(val.replace(/,/g, ''))) {
+            const num = parseInt(val.replace(/,/g, ''));
+            if (!isNaN(num)) val = num;
+          }
+          rowObj[col] = val;
         });
 
         // Smart Shifting: If BOQ is missing, UOM and Qty will be at earlier indices
@@ -1056,6 +1077,32 @@ const POLog = () => {
           // Clear the BOQ fields that were mispopulated
           if (uomIndex <= 5) rowObj['BOQ Activity'] = '';
           if (uomIndex <= 4) rowObj['BOQ Section'] = '';
+        }
+
+        // --- Post-parse correction for "Next Doc" ---
+        // If "PO-" appears in any cell, it belongs to Next Doc. 
+        // Often it gets shifted into 'Remain Qty' due to missing BOQ/Purpose columns.
+        for (let i = 0; i < cells.length; i++) {
+          const cellVal = (cells[i] || '').trim();
+          if (cellVal.toUpperCase().startsWith('PO-')) {
+             rowObj['Next Doc'] = cellVal;
+             
+             // Heuristic: If we found a PO reference, and Req. Qty is empty/zero but Vat Exempt has a number,
+             // it's almost certain that the columns were shifted and Vat Exempt is actually the quantity.
+             const vatVal = parseFloat(String(rowObj['Vat Exempt'] || '0').replace(/,/g, ''));
+             const reqVal = parseFloat(String(rowObj['Req. Qty'] || '0').replace(/,/g, ''));
+             
+             if (vatVal > 0 && reqVal === 0) {
+               rowObj['Req. Qty'] = rowObj['Vat Exempt'];
+               rowObj['Vat Exempt'] = 'No'; // Default for items with quantity
+             }
+
+             // If this same value was assigned to other fields during initial mapping, clear them
+             if (rowObj['Remain Qty'] === cellVal) rowObj['Remain Qty'] = '';
+             if (rowObj['Req. Qty'] === cellVal) rowObj['Req. Qty'] = '';
+             if (rowObj['Vat Exempt'] === cellVal) rowObj['Vat Exempt'] = '';
+             break;
+          }
         }
 
         if (rowObj['Description'] || rowObj['Item Code'] || rowObj['Seq #']) {
@@ -1190,14 +1237,25 @@ const POLog = () => {
     setShowVerifyDialog(false);
     setIsImporting(true);
     try {
+      // Create a map of PR Ref to Project Name from Step 1 for lookup
+      const prToProjectMap = {};
+      parsedRows.forEach(row => {
+        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+        if (pr) prToProjectMap[pr] = row['Project'] || '';
+      });
+
       // Group by PR and add sequence markers (1, 2, 3...)
       const prCounters = {};
       const enrichedDetails = materialDetailRows.map(row => {
         const pr = row._prRef || 'Ungrouped';
+        const prNorm = pr.trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+        const project = prToProjectMap[prNorm] || '';
+
         if (!prCounters[pr]) prCounters[pr] = 0;
         prCounters[pr]++;
         return {
           ...row,
+          Project: project,
           Marker: prCounters[pr] // 1, 2, 3... per PR
         };
       });
@@ -1243,15 +1301,46 @@ const POLog = () => {
           action: 'import_po_log',
           po_step_1: enrichedStep1,
           materials_step_2: materialRows.map(row => {
-            const prNorm = (row['PR'] || row.pr || '').toString().trim().toUpperCase();
-            const srNo = (row['Sr.No'] || '').toString().trim();
-            const matchedPr = Object.keys(reconRemarks).find(
-              k => k.toString().trim().toUpperCase() === prNorm
+            const prRaw = row['PR'] || row.pr || '';
+            const prNorm = prRaw.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+            const project = prToProjectMap[prNorm] || '';
+            // Aggressive normalization for SR No (remove leading zeros)
+            const srRaw = (row['Sr.No'] || '').toString().trim();
+            const srNo = (parseInt(srRaw.replace(/\D/g, '')) || srRaw).toString();
+            
+            const matchedPrKey = Object.keys(reconRemarks).find(
+              k => k.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === prNorm
             );
-            const remark = matchedPr ? (reconRemarks[matchedPr][srNo] || '') : '';
-            return remark ? { ...row, Remark: remark } : row;
+            
+            let remark = '';
+            if (matchedPrKey && reconRemarks[matchedPrKey]) {
+                const subMap = reconRemarks[matchedPrKey];
+                // Try direct match, then normalized match
+                remark = subMap[srNo] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNo)?.[1] || '';
+            }
+            
+            return { ...row, Remark: remark, Project: project };
           }),
-          material_details_step_3: enrichedDetails,
+          material_details_step_3: enrichedDetails.map(row => {
+             const prRaw = row._prRef || '';
+             const prNorm = prRaw.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+             const project = prToProjectMap[prNorm] || '';
+             // Aggressive normalization for Seq No
+             const srRaw = (row['Seq #'] || row['Sr.No'] || '').toString().trim();
+             const srNo = (parseInt(srRaw.replace(/\D/g, '')) || srRaw).toString();
+             
+             const matchedPrKey = Object.keys(reconRemarks).find(
+               k => k.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === prNorm
+             );
+             
+             let remark = '';
+             if (matchedPrKey && reconRemarks[matchedPrKey]) {
+                 const subMap = reconRemarks[matchedPrKey];
+                 remark = subMap[srNo] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNo)?.[1] || '';
+             }
+             
+             return { ...row, Remark: remark, Project: project };
+          }),
         }),
       });
 
@@ -1452,14 +1541,6 @@ const POLog = () => {
   const handleCompareWithExisting = useCallback(async (prRef, silent = false) => {
     if (!prRef) return;
     
-    // Check Cache first
-    if (comparisonCache[prRef]) {
-      if (!silent) {
-        setComparisonModal({ show: true, prRef, data: comparisonCache[prRef].data, isLive: false });
-      }
-      return;
-    }
-
     if (comparisonLoadingRef.current.has(prRef)) return;
     
     if (!silent) setIsComparing(true);
@@ -1546,12 +1627,36 @@ const POLog = () => {
         });
 
         const targetPr = prRef.toString().trim().toUpperCase();
-        const step2Items = materialRows.filter(r => (r.PR || r.pr || r._prRef || '').toString().trim().toUpperCase() === targetPr);
-        const step3Items = materialDetailRows.filter(r => (r.PR || r.pr || r._prRef || '').toString().trim().toUpperCase() === targetPr);
-        const newItemsRaw = step3Items.length > 0 ? step3Items : step2Items;
-        const currentItems = newItemsRaw.map(item => ({
+        
+        // Always use refs to get the absolute latest state during long-running async comparison
+        const step2Items = materialRowsRef.current.filter(r => (r.PR || r.pr || r._prRef || '').toString().trim().toUpperCase() === targetPr);
+        const step3Items = materialDetailRowsRef.current.filter(r => (r.PR || r.pr || r._prRef || '').toString().trim().toUpperCase() === targetPr);
+        
+        // MERGE LOGIC: Combine Step 2 and Step 3 by Sr.No
+        // Step 2 provides financial accuracy (Rate Sum), Step 3 provides detailed line accuracy.
+        const combinedMap = {};
+        
+        // 1. Load Step 3 items as the base (more rows/details)
+        step3Items.forEach(item => {
+          const sr = (item['Sr.No'] || item.Sr_No || item.SrNo || item['Seq #'] || '').toString();
+          combinedMap[sr] = { ...item, Sr_No: sr };
+        });
+        
+        // 2. Overlay Step 2 items (overwrite financial fields if found)
+        step2Items.forEach(item => {
+          const sr = (item['Sr.No'] || item.Sr_No || item.SrNo || item['Seq #'] || '').toString();
+          if (combinedMap[sr]) {
+            // Priority: Step 2 Rate/Total are usually more accurate in ERP exports
+            combinedMap[sr].Qty = item.Qty || item.qty || combinedMap[sr].Qty || '0.00';
+            combinedMap[sr].Rate = item.Rate || item.rate || combinedMap[sr].Rate || '0.00';
+            combinedMap[sr].Total = item.Total || item.total || combinedMap[sr].Total || '0.00';
+          } else {
+            combinedMap[sr] = { ...item, Sr_No: sr };
+          }
+        });
+
+        const currentItems = Object.values(combinedMap).map(item => ({
           ...item,
-          Sr_No: (item['Sr.No'] || item.Sr_No || item.SrNo || item['Seq #'] || '').toString(),
           'Qty': item['Qty'] || item['QTY'] || item['Req. Qty'] || item['Req Qty'] || item['Req_Qty'] || '0.00',
           'Rate': item['Rate'] || item['RATE'] || '0.00',
           'Total': item['Total'] || item['TOTAL'] || '0.00',
@@ -1601,7 +1706,7 @@ const POLog = () => {
       if (!silent) setIsComparing(false);
       comparisonLoadingRef.current.delete(prRef);
     }
-  }, [materialRows, materialDetailRows, rateDetailsMap, comparisonCache]); // handleCompareWithExisting dependencies
+  }, [rateDetailsMap]); // handleCompareWithExisting dependencies
 
   // Dynamic visible log slicing for fast pagination rendering
   const visibleLog = useMemo(() => {
@@ -3240,9 +3345,9 @@ const POLog = () => {
               </div>
 
               <div className="flex items-center gap-4">
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${comparisonModal.isLive ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-blue-500/10 border-blue-500/20 text-blue-400'} text-[10px] font-black uppercase tracking-widest`}>
-                   <div className={`w-1.5 h-1.5 rounded-full ${comparisonModal.isLive ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'} shadow-[0_0_8px_currentColor]`} />
-                   {comparisonModal.isLive ? 'Live Sync' : 'Cached Data'}
+                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_currentColor]" />
+                   Live Database Sync
                 </div>
                 <button 
                   onClick={() => { setRemarksInput({}); setComparisonModal({ ...comparisonModal, show: false }); }}
@@ -3461,15 +3566,16 @@ const POLog = () => {
                   <button 
                     onClick={() => {
                       // Persist all filled remarks into reconRemarks under this PR
-                      const prRef = comparisonModal.prRef;
                       const filledRemarks = Object.entries(remarksInput).reduce((acc, [k, v]) => {
                         if (v && v.trim()) acc[k] = v.trim();
                         return acc;
                       }, {});
                       if (Object.keys(filledRemarks).length > 0) {
+                        const prRef = comparisonModal.prRef || '';
+                        const normalizedPr = prRef.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
                         setReconRemarks(prev => ({
                           ...prev,
-                          [prRef]: { ...(prev[prRef] || {}), ...filledRemarks }
+                          [normalizedPr]: { ...(prev[normalizedPr] || {}), ...filledRemarks }
                         }));
                       }
                       setRemarksInput({});
