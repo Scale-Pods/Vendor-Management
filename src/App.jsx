@@ -17,7 +17,6 @@ import Sheets from './components/sheets/Sheets';
 import POLog from './components/polog/POLog';
 import ReviewYear from './components/dashboard/ReviewYear';
 import ReviewDashboard from './components/dashboard/ReviewDashboard';
-import PRDashboard from './components/pr-dashboard/PRDashboard';
 import { SearchBar } from './components/ui/search-bar';
 import Login from './components/auth/Login';
 import UserManagement from './components/admin/UserManagement';
@@ -63,7 +62,6 @@ const App = () => {
   const isAdmin = user?.role === 'admin';
 
   const mainNav = [
-    { id: 'pr-dashboard', label: 'PR Dashboard', icon: IconClipboardCheck },
     { id: 'polog', label: 'Dashboard', icon: IconClipboardList },
   ];
 
@@ -277,8 +275,7 @@ const App = () => {
         </header>
 
         {/* Dynamic Content */}
-        <div className={activeTab === 'sheets' || activeTab === 'polog' || activeTab === 'pr-dashboard' ? "flex-1 w-full overflow-hidden" : "p-8 w-full overflow-y-auto"}>
-          {activeTab === 'pr-dashboard' && <PRDashboard />}
+        <div className={activeTab === 'sheets' || activeTab === 'polog' ? "flex-1 w-full overflow-hidden" : "p-8 w-full overflow-y-auto"}>
           {activeTab === 'polog' && <POLog initialPR={selectedPR} />}
           {activeTab === 'users' && isAdmin && <UserManagement />}
           {activeTab === 'review-group' && <ReviewDashboard />}

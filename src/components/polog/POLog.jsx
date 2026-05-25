@@ -325,6 +325,8 @@ const POLog = () => {
   const [comparisonCache, setComparisonCache] = useState({}); // { [prRef]: { data, isLive: boolean } }
   const comparisonLoadingRef = useRef(new Set()); // Tracks PRs currently being fetched to avoid duplicates
   const [reconRemarks, setReconRemarks] = useState({}); // { [prRef]: { [rowKey]: string } }
+  const reconRemarksRef = useRef(reconRemarks);
+  useEffect(() => { reconRemarksRef.current = reconRemarks; }, [reconRemarks]);
   const [remarksInput, setRemarksInput] = useState({}); // { [rowKey]: string } — temp state inside comparison modal
   const [rateSummaryMap, setRateSummaryMap] = useState({}); // { [prRef]: { subtotal, discount, charges, net, manualTotal } }
   const [isImporting, setIsImporting] = useState(false);
@@ -1304,19 +1306,21 @@ const POLog = () => {
             const prRaw = row['PR'] || row.pr || '';
             const prNorm = prRaw.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
             const project = prToProjectMap[prNorm] || '';
-            // Aggressive normalization for SR No (remove leading zeros)
-            const srRaw = (row['Sr.No'] || '').toString().trim();
-            const srNo = (parseInt(srRaw.replace(/\D/g, '')) || srRaw).toString();
+            // Use same key derivation as comparison modal: raw Sr.No string
+            const srKey = (row['Sr.No'] || '').toString().trim();
+            // Also compute normalized version for fallback matching
+            const srNorm = (parseInt(srKey.replace(/\D/g, '')) || srKey).toString();
             
-            const matchedPrKey = Object.keys(reconRemarks).find(
+            const remarks = reconRemarksRef.current;
+            const matchedPrKey = Object.keys(remarks).find(
               k => k.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === prNorm
             );
             
             let remark = '';
-            if (matchedPrKey && reconRemarks[matchedPrKey]) {
-                const subMap = reconRemarks[matchedPrKey];
-                // Try direct match, then normalized match
-                remark = subMap[srNo] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNo)?.[1] || '';
+            if (matchedPrKey && remarks[matchedPrKey]) {
+                const subMap = remarks[matchedPrKey];
+                // Try exact match first, then normalized fallback
+                remark = subMap[srKey] || subMap[srNorm] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNorm)?.[1] || '';
             }
             
             return { ...row, Remark: remark, Project: project };
@@ -1325,18 +1329,20 @@ const POLog = () => {
              const prRaw = row._prRef || '';
              const prNorm = prRaw.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
              const project = prToProjectMap[prNorm] || '';
-             // Aggressive normalization for Seq No
-             const srRaw = (row['Seq #'] || row['Sr.No'] || '').toString().trim();
-             const srNo = (parseInt(srRaw.replace(/\D/g, '')) || srRaw).toString();
+             // Use same key derivation as comparison modal: raw Seq #/Sr.No string
+             const srKey = (row['Seq #'] || row['Sr.No'] || '').toString().trim();
+             const srNorm = (parseInt(srKey.replace(/\D/g, '')) || srKey).toString();
              
-             const matchedPrKey = Object.keys(reconRemarks).find(
+             const remarks = reconRemarksRef.current;
+             const matchedPrKey = Object.keys(remarks).find(
                k => k.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === prNorm
              );
              
              let remark = '';
-             if (matchedPrKey && reconRemarks[matchedPrKey]) {
-                 const subMap = reconRemarks[matchedPrKey];
-                 remark = subMap[srNo] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNo)?.[1] || '';
+             if (matchedPrKey && remarks[matchedPrKey]) {
+                 const subMap = remarks[matchedPrKey];
+                 // Try exact match first, then normalized fallback
+                 remark = subMap[srKey] || subMap[srNorm] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNorm)?.[1] || '';
              }
              
              return { ...row, Remark: remark, Project: project };
