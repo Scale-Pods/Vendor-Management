@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   IconClipboardData,
   IconTrash,
@@ -28,7 +28,7 @@ import {
   IconArrowUpRight,
   IconArrowsDiff
 } from '@tabler/icons-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import BoxLoader from '../ui/BoxLoader';
 
 
@@ -157,6 +157,8 @@ const POLogCard = ({ row }) => {
             ? 'bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.3)]' 
             : status === 'Open' 
             ? 'bg-[rgba(245,158,11,0.15)] text-[#F59E0B] border border-[rgba(245,158,11,0.3)]' 
+            : status === 'Sent for approval' || status.toLowerCase().includes('sent for approval')
+            ? 'bg-[rgba(139,92,246,0.15)] text-[#8B5CF6] border border-[rgba(139,92,246,0.3)]'
             : 'bg-[rgba(239,68,68,0.15)] text-[#EF4444] border border-[rgba(239,68,68,0.3)]'
         }`}>
           {status}
@@ -349,6 +351,8 @@ const POLog = () => {
   const [logLoading, setLogLoading] = useState(false);
   const [logSearch, setLogSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState('All');
+  const [enteredByFilter, setEnteredByFilter] = useState('All');
+  const [spendPeriod, setSpendPeriod] = useState('Monthly');
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const [expandedCardRef, setExpandedCardRef] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
@@ -1425,6 +1429,14 @@ const POLog = () => {
     });
   }, [logData]);
 
+  const uniqueEnteredBy = useMemo(() => {
+    const names = new Set();
+    logData.forEach(row => {
+      if (row['Entered By']) names.add(row['Entered By']);
+    });
+    return Array.from(names).sort();
+  }, [logData]);
+
   const filteredLog = useMemo(() => {
     let result = logData;
 
@@ -1460,6 +1472,10 @@ const POLog = () => {
       result = result.filter(row => row.Month === monthFilter);
     }
 
+    if (enteredByFilter !== 'All') {
+      result = result.filter(row => row['Entered By'] === enteredByFilter);
+    }
+
     if (logSearch.trim()) {
       const q = logSearch.trim().toLowerCase();
       result = result.filter((row) =>
@@ -1468,7 +1484,7 @@ const POLog = () => {
     }
 
     return result;
-  }, [logData, logSearch, monthFilter]);
+  }, [logData, logSearch, monthFilter, enteredByFilter]);
 
   const dashboardStats = useMemo(() => {
     if (!logData.length) return null;
@@ -1481,16 +1497,21 @@ const POLog = () => {
         'Approved': 0,
         'Open': 0,
         'Rejected': 0,
-        'Pending': 0
+        'Pending': 0,
+        'Sent for approval': 0
       },
       processedRefs: new Set()
     };
+
+    const spendPeriodMap = {};
 
     logData.forEach(row => {
       const ref = row.Ref || row.Reference;
       const pr = row['Req Ref'] || row.Req_Ref;
       const status = row.Status || 'Open';
       const supplier = row.Supplier;
+      const month = row.Month || '';
+      const poDate = row['PO Date'] || '';
 
       // Track unique PRs and Suppliers regardless of Ref
       if (pr) stats.uniquePRs.add(pr);
@@ -1503,10 +1524,27 @@ const POLog = () => {
         const net = parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
         stats.totalSpend += net;
 
-        if (status.includes('Approve')) stats.statusDistribution['Approved']++;
-        else if (status.includes('Reject')) stats.statusDistribution['Rejected']++;
-        else if (status.includes('Pending')) stats.statusDistribution['Pending']++;
+        const statusLower = status.toLowerCase();
+        if (statusLower.includes('sent for approval')) stats.statusDistribution['Sent for approval']++;
+        else if (statusLower.includes('approve')) stats.statusDistribution['Approved']++;
+        else if (statusLower.includes('reject')) stats.statusDistribution['Rejected']++;
+        else if (statusLower.includes('pending')) stats.statusDistribution['Pending']++;
         else stats.statusDistribution['Open']++;
+
+        // Period breakdown for spend
+        let periodKey = '';
+        if (spendPeriod === 'Daily') {
+          periodKey = poDate || row['Entered Time'] || '';
+          if (periodKey) periodKey = periodKey.split(' ')[0];
+        } else if (spendPeriod === 'Yearly') {
+          const mParts = month.split('-');
+          periodKey = mParts[1] || '';
+        } else {
+          periodKey = month || '';
+        }
+        if (periodKey) {
+          spendPeriodMap[periodKey] = (spendPeriodMap[periodKey] || 0) + net;
+        }
       }
     });
 
@@ -1514,11 +1552,25 @@ const POLog = () => {
       .filter(entry => entry[1] > 0)
       .map(([name, value]) => ({ name, value }));
 
+    const spendBreakdown = Object.entries(spendPeriodMap)
+      .sort((a, b) => {
+        if (spendPeriod === 'Monthly') {
+          const monthOrder = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+          const aP = a[0].split('-'), bP = b[0].split('-');
+          const ay = parseInt(aP[1])||0, by = parseInt(bP[1])||0;
+          if (ay !== by) return ay - by;
+          return (monthOrder[aP[0]]||0) - (monthOrder[bP[0]]||0);
+        }
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([period, value]) => ({ period, value }));
+
     const COLORS = {
       'Approved': '#10B981',
       'Open': '#F59E0B',
       'Pending': '#3B82F6',
-      'Rejected': '#EF4444'
+      'Rejected': '#EF4444',
+      'Sent for approval': '#8B5CF6'
     };
 
     return {
@@ -1526,9 +1578,10 @@ const POLog = () => {
       uniquePRs: stats.uniquePRs.size,
       uniqueSuppliers: stats.uniqueSuppliers.size,
       chartData,
+      spendBreakdown,
       colors: COLORS
     };
-  }, [logData]);
+  }, [logData, spendPeriod]);
 
   const formatLargeCurrency = (value) => {
     if (value >= 1000000) return `AED ${(value / 1000000).toFixed(1)}M`;
@@ -1752,43 +1805,37 @@ const POLog = () => {
       <div className="flex-1 overflow-y-auto p-6 space-y-10">
         {/* â•â•â•â•â•â•â•â•â•â•â• DASHBOARD OVERVIEW â•â•â•â•â•â•â•â•â•â•â• */}
         {dashboardStats && (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 stagger-item" style={{ animationDelay: '0ms' }}>
-          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Stat Card 1 */}
-            <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                <IconWallet size={64} className="text-[#F59E0B]" />
-              </div>
-              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Managed Spend</p>
-              <h4 className="text-3xl font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</h4>
-              <div className="flex items-center gap-1.5 mt-4 text-[#10B981]">
-                <IconArrowUpRight size={14} stroke={3} />
-                <span className="text-[11px] font-black uppercase tracking-tight">+12% from last cycle</span>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 stagger-item" style={{ animationDelay: '0ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconWallet size={64} className="text-[#F59E0B]" />
             </div>
-
-            {/* Stat Card 2 */}
-            <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                <IconReceipt2 size={64} className="text-[#F59E0B]" />
-              </div>
-              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Purchase Requests</p>
-              <h4 className="text-3xl font-black text-white">{dashboardStats.uniquePRs}</h4>
-              <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Total PRs currently tracked</p>
-            </div>
-
-            {/* Stat Card 3 */}
-            <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                <IconPackage size={64} className="text-[#F59E0B]" />
-              </div>
-              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Active Suppliers</p>
-              <h4 className="text-3xl font-black text-white">{dashboardStats.uniqueSuppliers}</h4>
-              <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Trusted vendor network size</p>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Managed Spend</p>
+            <h4 className="text-3xl font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</h4>
+            <div className="flex items-center gap-1.5 mt-4 text-[#10B981]">
+              <IconArrowUpRight size={14} stroke={3} />
+              <span className="text-[11px] font-black uppercase tracking-tight">+12% from last cycle</span>
             </div>
           </div>
 
-          {/* Pie Chart Card */}
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconReceipt2 size={64} className="text-[#F59E0B]" />
+            </div>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Purchase Requests</p>
+            <h4 className="text-3xl font-black text-white">{dashboardStats.uniquePRs}</h4>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Total PRs currently tracked</p>
+          </div>
+
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconPackage size={64} className="text-[#F59E0B]" />
+            </div>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Active Suppliers</p>
+            <h4 className="text-3xl font-black text-white">{dashboardStats.uniqueSuppliers}</h4>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Trusted vendor network size</p>
+          </div>
+
           <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl h-[240px] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Status Distribution</p>
@@ -1814,10 +1861,10 @@ const POLog = () => {
                   <RechartsTooltip 
                     contentStyle={{ background: '#121824', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
                     itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                    formatter={(value, name) => [`${value} PRs`, name]}
                   />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Tooltip or Center Text could go here */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-2">
                 <span className="text-xl font-black text-white">{dashboardStats.uniquePRs}</span>
                 <span className="text-[8px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Total</span>
@@ -1827,7 +1874,95 @@ const POLog = () => {
         </div>
         )}
 
-        {/* â•â•â•â•â•â•â•â•â•â•â• PASTE ZONE â•â•â•â•â•â•â•â•â•â•â• */}
+        {/* Spend Breakdown + Status Summary */}
+        {dashboardStats && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger-item" style={{ animationDelay: '50ms' }}>
+          <div className="lg:col-span-2 bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl">
+            <div className="flex items-center justify-between mb-6">
+              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Spend Breakdown</p>
+              <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] rounded-lg p-0.5">
+                {['Daily', 'Monthly', 'Yearly'].map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setSpendPeriod(p)}
+                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${
+                      spendPeriod === p
+                        ? 'bg-[#F59E0B] text-black shadow-lg'
+                        : 'text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)]'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="h-[200px]">
+              {dashboardStats.spendBreakdown.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dashboardStats.spendBreakdown} margin={{ top: 5, right: 10, left: 10, bottom: 20 }}>
+                    <XAxis
+                      dataKey="period"
+                      stroke="rgba(255,255,255,0.2)"
+                      fontSize={10}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'rgba(255,255,255,0.4)' }}
+                      angle={spendPeriod === 'Daily' ? -45 : 0}
+                      textAnchor={spendPeriod === 'Daily' ? 'end' : 'middle'}
+                      height={spendPeriod === 'Daily' ? 60 : 30}
+                    />
+                    <YAxis
+                      stroke="rgba(255,255,255,0.2)"
+                      fontSize={10}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'rgba(255,255,255,0.4)' }}
+                      tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}
+                    />
+                    <RechartsTooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                      contentStyle={{ background: '#121824', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
+                      labelStyle={{ color: 'white', fontWeight: 'bold', marginBottom: '4px' }}
+                      itemStyle={{ color: '#F59E0B', fontWeight: 'bold' }}
+                      formatter={(v) => [`AED ${v.toLocaleString()}`, 'Spend']}
+                    />
+                    <Bar dataKey="value" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={spendPeriod === 'Daily' ? 20 : 32} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-[rgba(255,255,255,0.2)] text-[11px] font-bold uppercase tracking-wider">
+                  No period data available
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl">
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4">Status Summary</p>
+            <div className="space-y-3">
+              {dashboardStats.chartData.map((entry) => (
+                <div key={entry.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dashboardStats.colors[entry.name] }} />
+                    <span className="text-[12px] font-semibold text-[rgba(255,255,255,0.7)]">{entry.name}</span>
+                  </div>
+                  <span className="text-[13px] font-black text-white">{entry.value}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 pt-4 border-t border-[rgba(255,255,255,0.05)] grid grid-cols-2 gap-3">
+              <div className="text-center">
+                <p className="text-[18px] font-black text-white">{dashboardStats.uniqueSuppliers}</p>
+                <p className="text-[8px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Suppliers</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[18px] font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</p>
+                <p className="text-[8px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Total Spend</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
         <div className="stagger-item" style={{ animationDelay: '0ms' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
@@ -2715,6 +2850,34 @@ const POLog = () => {
                   </svg>
                 </div>
               </div>
+
+              {/* Entered By Dropdown */}
+              {uniqueEnteredBy.length > 0 && (
+              <div 
+                className="relative flex items-center px-3 py-2 rounded-lg"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <select
+                  value={enteredByFilter}
+                  onChange={(e) => { setEnteredByFilter(e.target.value); setDisplayCount(PAGE_SIZE); }}
+                  className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
+                  style={{ minWidth: '100px' }}
+                >
+                  <option value="All" className="bg-[#0f1520] text-white">All Entered By</option>
+                  {uniqueEnteredBy.map(name => (
+                    <option key={name} value={name} className="bg-[#0f1520] text-white">{name}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+              )}
 
               {/* Search bar */}
               <div

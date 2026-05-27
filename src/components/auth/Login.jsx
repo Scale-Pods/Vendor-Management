@@ -64,8 +64,8 @@ const Login = ({ onLogin }) => {
                 />
               </div>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Welcome Back</h1>
-            <p className="text-[rgba(255,255,255,0.4)] text-sm">Secure access to Vendor Management</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white">PRIME HORIZON</h1>
+            <p className="text-[rgba(255,255,255,0.4)] text-xs">CONSTRUCTION L.L.C</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -129,7 +129,7 @@ const Login = ({ onLogin }) => {
                 <IconLoader2 size={20} className="animate-spin" />
               ) : (
                 <>
-                  <span>Sign In to Dashboard</span>
+                  <span>Sign In</span>
                   <IconArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                 </>
               )}

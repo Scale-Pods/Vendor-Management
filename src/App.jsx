@@ -240,7 +240,7 @@ const App = () => {
                   user.role === 'editor' ? 'text-blue-400' : 
                   'text-[rgba(255,255,255,0.3)]'
                 } font-black uppercase tracking-[0.1em] truncate`}>
-                  {user.role}
+                  {user.role === 'admin' ? 'Owner' : user.role}
                 </span>
               </div>
             </div>
