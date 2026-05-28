@@ -50,7 +50,7 @@ const Login = ({ onLogin }) => {
       
       {/* Login Card */}
       <div className="relative z-10 w-full max-w-md px-6">
-        <div className="glass-panel p-10 space-y-8 relative overflow-hidden backdrop-blur-[32px]">
+         <div className="glass-panel p-6 sm:p-10 space-y-8 relative overflow-hidden backdrop-blur-[32px]">
           {/* Top subtle glow */}
           <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-[#F59E0B]/30 to-transparent" />
           

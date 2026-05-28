@@ -8,7 +8,9 @@ import {
   IconChevronDown,
   IconLogout,
   IconUsers,
-  IconShieldLock
+  IconShieldLock,
+  IconMenu2,
+  IconX
 } from '@tabler/icons-react';
 import VendorAnalysis from './components/vendors/VendorAnalysis';
 import PRTable from './components/records/PRTable';
@@ -86,6 +88,7 @@ const App = () => {
   ];
 
   const [isReviewExpanded, setIsReviewExpanded] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const NavItem = ({ item, isSubItem, hasChildren, isExpanded, onExpand }) => {
     const isActive = activeTab === item.id;
@@ -255,11 +258,82 @@ const App = () => {
         </div>
       </aside>
 
+      {/* Mobile Drawer */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] md:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+          <aside
+            style={{ width: '260px' }}
+            className="absolute inset-y-0 left-0 glass-panel !rounded-none border-r border-[rgba(255,255,255,0.08)] flex flex-col animate-in slide-in-from-left duration-300"
+          >
+            <div className="px-6 pt-8 pb-6 flex items-center justify-between border-b border-[rgba(255,255,255,0.08)]">
+              <img
+                src="/scalepods-logo.png"
+                alt="ScalePods"
+                style={{ width: '160px', height: 'auto', filter: 'invert(1)', mixBlendMode: 'screen', opacity: 0.95 }}
+              />
+              <button onClick={() => setMobileMenuOpen(false)} className="p-2 text-[rgba(255,255,255,0.5)] hover:text-white rounded-lg transition-colors">
+                <IconX size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-3 pt-2">
+              <div className="px-2 pt-5 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">MAIN</div>
+              <nav className="space-y-[2px]">
+                {mainNav.map((item) => <NavItem key={item.id} item={item} />)}
+              </nav>
+
+              <div className="px-2 pt-6 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">REVIEW</div>
+              <nav className="space-y-[2px]">
+                {reviewNav.map((item) => (
+                  <NavItem key={item.id} item={item} hasChildren={!!item.children} isExpanded={isReviewExpanded} onExpand={setIsReviewExpanded} />
+                ))}
+              </nav>
+
+              <div className="px-2 pt-6 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">DATA</div>
+              <nav className="space-y-[2px]">
+                {dataNav.map((item) => <NavItem key={item.id} item={item} />)}
+              </nav>
+            </div>
+
+            <div className="px-3 py-6 border-t border-[rgba(255,255,255,0.08)] space-y-4">
+              {isAdmin && (
+                <div className="pb-2 border-b border-[rgba(255,255,255,0.05)]">
+                  <nav className="space-y-[2px]">
+                    {adminNav.map((item) => <NavItem key={item.id} item={item} />)}
+                  </nav>
+                </div>
+              )}
+              <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-[rgba(255,255,255,0.05)] border-2 border-[rgba(255,255,255,0.1)] flex items-center justify-center text-xs font-bold text-[rgba(255,255,255,0.4)]">
+                    {user.email?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[13px] font-medium text-[rgba(255,255,255,0.8)] truncate">{user.email?.split('@')[0]}</span>
+                    <span className="text-[10px] text-[rgba(255,255,255,0.3)] font-black uppercase tracking-[0.1em] truncate">{user.role === 'admin' ? 'Owner' : user.role}</span>
+                  </div>
+                </div>
+                <button onClick={handleLogout} className="p-2 text-label hover:text-white transition-colors" title="Logout">
+                  <IconLogout size={18} />
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* Main Content */}
-      <main style={{ marginLeft: `${SIDEBAR_W}px` }} className="flex-1 flex flex-col h-screen overflow-hidden relative z-10">
+      <main className="md:ml-[260px] flex-1 flex flex-col h-screen overflow-hidden relative z-10">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 glass-panel !rounded-none border-b border-[rgba(255,255,255,0.07)] px-8 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 glass-panel !rounded-none border-b border-[rgba(255,255,255,0.07)] px-4 sm:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-2 text-[rgba(255,255,255,0.5)] hover:text-white hover:bg-[rgba(255,255,255,0.05)] rounded-lg transition-colors"
+            >
+              <IconMenu2 size={22} />
+            </button>
             <div className="relative hidden sm:block w-72 z-50">
               <SearchBar placeholder="Search POs, Suppliers..." />
             </div>

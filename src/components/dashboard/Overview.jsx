@@ -667,7 +667,7 @@ const Overview = ({ initialPR, isModalMode }) => {
 
         {checkResult && !isChecking && (
           <div className="w-full animate-in fade-in duration-500 mb-10">
-              <div className="rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.1)] shadow-2xl" style={{ background: 'rgba(6,9,15,0.85)', backdropFilter: 'blur(32px)' }}>
+              <div className="rounded-2xl border border-[rgba(255,255,255,0.1)] shadow-2xl" style={{ background: 'rgba(6,9,15,0.85)', backdropFilter: 'blur(32px)' }}>
                 {/* Toolbar */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)]">
                   <div className="flex items-center gap-2 p-1 bg-[rgba(0,0,0,0.3)] rounded-xl border border-[rgba(255,255,255,0.06)]">
@@ -818,12 +818,15 @@ const Overview = ({ initialPR, isModalMode }) => {
                   </table>
                 ) : (
                   /* STANDARD TABLE */
-                  <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
+                  <table className="w-full text-left border-separate border-spacing-0">
                     <thead>
                       <tr className="border-b border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)]">
-                        {pickedColumns.map(col => (
-                          <th key={col} className={`px-6 py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider truncate ${col === 'Description' ? 'w-[350px]' : ''}`}>{col.replace(/_/g, ' ')}</th>
-                        ))}
+                        {pickedColumns.map((col, i) => {
+                          const colWidth = col === 'Sr_No' ? 'w-[70px]' : col === 'Description' ? 'w-auto min-w-[200px]' : col === 'Supplier' ? 'w-[180px] min-w-[140px]' : col === 'Req_Qty' ? 'w-[100px]' : col === 'UOM' ? 'w-[80px]' : col === 'Total' || col === 'Amount' ? 'w-[150px]' : '';
+                          return (
+                            <th key={col} className={`px-6 py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider truncate ${colWidth} ${i < pickedColumns.length - 1 ? 'border-r border-[rgba(255,255,255,0.04)]' : ''}`}>{col.replace(/_/g, ' ')}</th>
+                          );
+                        })}
                         <th className="w-[80px]" />
                       </tr>
                     </thead>
@@ -831,12 +834,14 @@ const Overview = ({ initialPR, isModalMode }) => {
                       {displayData.map((item, idx) => (
                         <React.Fragment key={idx}>
                           <tr onClick={() => setExpandedRow(expandedRow === idx ? null : idx)} className={`border-b border-[rgba(255,255,255,0.04)] cursor-pointer transition-colors hover:bg-[rgba(255,255,255,0.02)] ${expandedRow === idx ? 'bg-[rgba(245,158,11,0.06)]' : ''}`}>
-                            {pickedColumns.map(col => {
+                            {pickedColumns.map((col, cIdx) => {
                               const isFinancial = col === 'Total' || col === 'Rate' || col === 'Amount' || col === 'Price';
                               const display = item[col] == null ? '—' : (isFinancial ? formatCurrency(item[col]) : String(item[col]));
                               const isInternalChange = item._fieldChanges?.[col.toLowerCase()] || (col === 'Req_Qty' && item._fieldChanges?.qty);
+                              const isNumeric = col === 'Sr_No' || col === 'Req_Qty' || isFinancial;
+                              const isDesc = col === 'Description';
                               return (
-                                <td key={col} className={`px-6 py-4 text-[13px] truncate ${col === 'Description' ? 'font-bold text-white' : 'text-[rgba(255,255,255,0.65)]'}`}>
+                                <td key={col} className={`px-6 py-4 text-[13px] ${isNumeric ? 'whitespace-nowrap' : isDesc ? 'truncate' : 'whitespace-nowrap'} ${isDesc ? 'font-bold text-white' : 'text-[rgba(255,255,255,0.65)]'} ${cIdx < pickedColumns.length - 1 ? 'border-r border-[rgba(255,255,255,0.04)]' : ''}`}>
                                   <span className={isInternalChange ? 'text-[#F59E0B] font-bold underline underline-offset-4 decoration-[rgba(245,158,11,0.3)]' : ''}>{display}</span>
                                 </td>
                               );

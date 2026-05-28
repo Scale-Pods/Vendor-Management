@@ -124,7 +124,7 @@ const ReviewYear = ({ year, action }) => {
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-12 py-10">
+            <div className="flex-1 overflow-auto custom-scrollbar px-12 py-10">
               <Overview darkMode={true} initialPR={selectedAuditPR} isModalMode={true} />
             </div>
           </div>

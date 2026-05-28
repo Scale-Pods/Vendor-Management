@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Force 100% scale — prevent browser zoom from affecting layout */
+html {
+  zoom: 1;
+}
+
 @theme {
   --color-brand-primary: #F59E0B;
   --color-brand-secondary: #D97706;

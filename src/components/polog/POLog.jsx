@@ -2812,7 +2812,7 @@ const POLog = () => {
 
         {/* â•â•â•â•â•â•â•â•â•â•â• EXISTING PO LOG â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="stagger-item" style={{ animationDelay: '200ms' }}>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 rounded-full bg-[rgba(255,255,255,0.15)]" />
               <h2 className="text-lg font-bold text-white tracking-tight">PR List</h2>
@@ -2824,7 +2824,7 @@ const POLog = () => {
             </div>
 
             {/* Search bar & Filters */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               {/* Month Dropdown */}
               <div 
                 className="relative flex items-center px-3 py-2 rounded-lg"
@@ -2881,11 +2881,10 @@ const POLog = () => {
 
               {/* Search bar */}
               <div
-                className="relative flex items-center gap-2 px-3 py-2 rounded-lg"
+                className="relative flex items-center gap-2 px-3 py-2 rounded-lg w-full sm:w-auto sm:min-w-[200px] lg:w-[280px]"
                 style={{
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(255,255,255,0.08)',
-                  width: '280px',
                 }}
               >
                 <IconSearch size={14} className="text-[rgba(255,255,255,0.2)] shrink-0" />
@@ -3590,8 +3589,8 @@ const POLog = () => {
                            </div>
 
                            {/* Two Column Layout */}
-                           <div className="grid grid-cols-2 gap-8 relative">
-                              <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/5 -translate-x-1/2" />
+                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative">
+                              <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-px bg-white/5 -translate-x-1/2" />
                               
                               {/* LEFT: Current DB Version */}
                               <div className="space-y-4">
