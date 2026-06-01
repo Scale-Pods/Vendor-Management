@@ -6,7 +6,7 @@ import {
 import { 
   IconClipboardList, IconListCheck, IconTrendingUp, IconTrendingDown, 
   IconUsers, IconLayoutDashboard, IconArrowUpRight, IconArrowDownRight,
-  IconFilter, IconRefresh, IconAlertTriangle
+  IconFilter, IconRefresh, IconAlertTriangle, IconVersions, IconArrowsDiff
 } from '@tabler/icons-react';
 import { supabase } from '../../lib/supabase';
 import { SearchBar } from '../ui/search-bar';
@@ -191,6 +191,46 @@ const ReviewDashboard = () => {
       totalSavings,
       totalIncreases
     };
+  }, [filteredData, loading]);
+
+  /* ─── Multi-Change Detail Stats ─── */
+  const multiChangeDetail = useMemo(() => {
+    if (loading) return null;
+
+    const oneChange = filteredData.filter(i => i.change2_total && !i.change3_total).length;
+    const twoChanges = filteredData.filter(i => i.change3_total && !i.change4_total).length;
+    const threeChanges = filteredData.filter(i => i.change4_total && !i.change5_total).length;
+    const fourPlusChanges = filteredData.filter(i => i.change5_total).length;
+    const totalChanged = oneChange + twoChanges + threeChanges + fourPlusChanges;
+
+    const avgChanges = totalChanged > 0
+      ? ((oneChange * 1 + twoChanges * 2 + threeChanges * 3 + fourPlusChanges * 4) / totalChanged).toFixed(1)
+      : '0.0';
+
+    const topMultiChange = filteredData
+      .map(i => {
+        let count = 0;
+        for (let n = 2; n <= 6; n++) {
+          if (i[`change${n}_total`] !== null && i[`change${n}_total`] !== '') count++;
+        }
+        const orig = getOriginalTotal(i);
+        const lat = getLatestTotal(i);
+        return { ...i, changeCount: count, variance: Math.abs(lat - orig) };
+      })
+      .filter(i => i.changeCount >= 2)
+      .sort((a, b) => b.changeCount - a.changeCount || b.variance - a.variance)
+      .slice(0, 8);
+
+    const supplierMultiMap = {};
+    filteredData.filter(i => i.change2_total).forEach(i => {
+      const s = i.Supplier || 'Unknown';
+      supplierMultiMap[s] = (supplierMultiMap[s] || 0) + 1;
+    });
+    const topMultiSuppliers = Object.entries(supplierMultiMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    return { oneChange, twoChanges, threeChanges, fourPlusChanges, totalChanged, avgChanges, topMultiChange, topMultiSuppliers };
   }, [filteredData, loading]);
 
   /* ─── Chart Data Processing ─── */
@@ -440,6 +480,139 @@ const ReviewDashboard = () => {
               </ResponsiveContainer>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ─── Multi-Change Items Deep Dive ─── */}
+      <div className="mb-8">
+        <div className="glass-panel border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] overflow-hidden">
+          <div className="p-6 border-b border-[rgba(255,255,255,0.05)] flex items-center justify-between bg-[rgba(255,255,255,0.02)]">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20" style={{ color: '#a855f7' }}>
+                <IconVersions size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  Multi-Change Items
+                </h3>
+                <p className="text-[10px] text-[rgba(255,255,255,0.3)] font-black uppercase mt-0.5 tracking-widest">
+                  Items with 2+ price revisions — average {multiChangeDetail?.avgChanges || '0.0'} changes per item
+                </p>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 text-[11px] text-white/40 font-bold">
+              <IconArrowsDiff size={14} />
+              {multiChangeDetail?.totalChanged || 0} items affected
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="p-6 space-y-4">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+            </div>
+          ) : (
+            <div className="p-6">
+              {/* Tiered Breakdown */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                {[
+                  { label: '1 Change', value: multiChangeDetail?.oneChange || 0, color: '#c8922a', bg: 'rgba(200,146,42,0.1)', border: 'rgba(200,146,42,0.2)' },
+                  { label: '2 Changes', value: multiChangeDetail?.twoChanges || 0, color: '#a855f7', bg: 'rgba(168,85,247,0.1)', border: 'rgba(168,85,247,0.2)' },
+                  { label: '3 Changes', value: multiChangeDetail?.threeChanges || 0, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' },
+                  { label: '4+ Changes', value: multiChangeDetail?.fourPlusChanges || 0, color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)' },
+                ].map(tier => {
+                  const pct = multiChangeDetail?.totalChanged > 0 ? ((tier.value / multiChangeDetail.totalChanged) * 100).toFixed(0) : '0';
+                  return (
+                    <div key={tier.label} className="rounded-xl p-4" style={{ background: tier.bg, border: `1px solid ${tier.border}` }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: tier.color }}>{tier.label}</span>
+                        <span className="text-xs font-bold text-white/40">{pct}%</span>
+                      </div>
+                      <p className="text-3xl font-black text-white">{tier.value}</p>
+                      <div className="mt-2 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: tier.color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Two-column: Top Items + Supplier Breakdown */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Top Items with Most Changes */}
+                <div className="lg:col-span-2">
+                  <h4 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">Items with Most Revisions</h4>
+                  {multiChangeDetail?.topMultiChange?.length ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-white/5">
+                            <th className="pb-3 pr-3 text-[9px] font-black text-white/20 uppercase tracking-[0.15em]">PR</th>
+                            <th className="pb-3 pr-3 text-[9px] font-black text-white/20 uppercase tracking-[0.15em]">Supplier</th>
+                            <th className="pb-3 pr-3 text-[9px] font-black text-white/20 uppercase tracking-[0.15em] text-center">Changes</th>
+                            <th className="pb-3 text-[9px] font-black text-white/20 uppercase tracking-[0.15em] text-right">Variance (AED)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {multiChangeDetail.topMultiChange.map((item, idx) => (
+                            <tr key={idx} className="border-b border-white/5 last:border-0 group hover:bg-white/[0.02] transition-colors">
+                              <td className="py-3 pr-3">
+                                <span className="text-white font-bold text-[12px]">{item.PR || item.Ref}</span>
+                              </td>
+                              <td className="py-3 pr-3 text-white/50 text-[11px] truncate max-w-[160px]">{item.Supplier || '—'}</td>
+                              <td className="py-3 pr-3 text-center">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black"
+                                  style={{
+                                    background: item.changeCount >= 4 ? 'rgba(239,68,68,0.15)' : item.changeCount >= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)',
+                                    color: item.changeCount >= 4 ? '#ef4444' : item.changeCount >= 3 ? '#f59e0b' : '#a855f7',
+                                  }}>
+                                  <IconArrowsDiff size={10} /> {item.changeCount}
+                                </span>
+                              </td>
+                              <td className="py-3 text-right text-white/60 font-semibold tabular-nums text-[12px]">
+                                {item.variance.toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center">
+                      <p className="text-white/20 text-[11px] font-black uppercase tracking-[0.2em]">No multi-change items found</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Supplier Multi-Change Breakdown */}
+                <div>
+                  <h4 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">Top Suppliers by Changes</h4>
+                  <div className="space-y-3">
+                    {multiChangeDetail?.topMultiSuppliers?.length ? (
+                      multiChangeDetail.topMultiSuppliers.map(([supplier, count], idx) => {
+                        const maxCount = multiChangeDetail.topMultiSuppliers[0][1];
+                        const barWidth = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                        return (
+                          <div key={supplier}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[12px] text-white/70 font-medium truncate max-w-[70%]">{supplier}</span>
+                              <span className="text-[11px] text-white font-bold">{count}</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${barWidth}%`, background: '#a855f7' }} />
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-8 text-center">
+                        <p className="text-white/20 text-[11px] font-black uppercase tracking-[0.2em]">No data</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

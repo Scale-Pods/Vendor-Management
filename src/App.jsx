@@ -10,7 +10,9 @@ import {
   IconUsers,
   IconShieldLock,
   IconMenu2,
-  IconX
+  IconX,
+  IconFileText,
+  IconBuilding
 } from '@tabler/icons-react';
 import VendorAnalysis from './components/vendors/VendorAnalysis';
 import PRTable from './components/records/PRTable';
@@ -63,28 +65,24 @@ const App = () => {
   const isViewer = user?.role === 'viewer';
   const isAdmin = user?.role === 'admin';
 
-  const mainNav = [
-    { id: 'polog', label: 'Dashboard', icon: IconClipboardList },
-  ];
-
   const adminNav = [
     { id: 'users', label: 'User Management', icon: IconUsers },
   ];
 
-  const reviewNav = [
+  const primeHorizonNav = [
+    { id: 'polog', label: 'PR QUOTE DATA', icon: IconClipboardList },
+    { id: 'prlist', label: 'PR ORDER REQUEST', icon: IconFileText },
     { 
       id: 'review-group', 
-      label: 'Review', 
+      label: 'REVIEW DATA', 
       icon: IconClipboardCheck,
       children: [
         { id: 'review2025', label: '2025 Cycle', icon: IconCalendar },
         { id: 'review2026', label: '2026 Cycle', icon: IconCalendar },
+        { id: 'sheets', label: 'Sheets', icon: IconTable, restricted: true },
       ]
-    }
-  ];
-
-  const dataNav = [
-    { id: 'sheets', label: 'Sheets', icon: IconTable, restricted: true },
+    },
+    { id: 'project-details', label: 'PROJECT DETAILS', icon: IconBuilding },
   ];
 
   const [isReviewExpanded, setIsReviewExpanded] = useState(false);
@@ -174,20 +172,12 @@ const App = () => {
 
         {/* Nav Groups */}
         <div className="flex-1 overflow-y-auto px-3 pt-2">
-          {/* MAIN group */}
+          {/* PRIME HORIZON group */}
           <div className="px-2 pt-5 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">
-            MAIN
+            PRIME HORIZON
           </div>
           <nav className="space-y-[2px]">
-            {mainNav.map((item) => <NavItem key={item.id} item={item} />)}
-          </nav>
-
-          {/* REVIEW group */}
-          <div className="px-2 pt-6 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">
-            REVIEW
-          </div>
-          <nav className="space-y-[2px]">
-            {reviewNav.map((item) => (
+            {primeHorizonNav.map((item) => (
               <NavItem 
                 key={item.id} 
                 item={item} 
@@ -196,14 +186,6 @@ const App = () => {
                 onExpand={setIsReviewExpanded}
               />
             ))}
-          </nav>
-
-          {/* DATA group */}
-          <div className="px-2 pt-6 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">
-            DATA
-          </div>
-          <nav className="space-y-[2px]">
-            {dataNav.map((item) => <NavItem key={item.id} item={item} />)}
           </nav>
         </div>
 
@@ -278,21 +260,11 @@ const App = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 pt-2">
-              <div className="px-2 pt-5 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">MAIN</div>
+              <div className="px-2 pt-5 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">PRIME HORIZON</div>
               <nav className="space-y-[2px]">
-                {mainNav.map((item) => <NavItem key={item.id} item={item} />)}
-              </nav>
-
-              <div className="px-2 pt-6 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">REVIEW</div>
-              <nav className="space-y-[2px]">
-                {reviewNav.map((item) => (
+                {primeHorizonNav.map((item) => (
                   <NavItem key={item.id} item={item} hasChildren={!!item.children} isExpanded={isReviewExpanded} onExpand={setIsReviewExpanded} />
                 ))}
-              </nav>
-
-              <div className="px-2 pt-6 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">DATA</div>
-              <nav className="space-y-[2px]">
-                {dataNav.map((item) => <NavItem key={item.id} item={item} />)}
               </nav>
             </div>
 
@@ -349,8 +321,9 @@ const App = () => {
         </header>
 
         {/* Dynamic Content */}
-        <div className={activeTab === 'sheets' || activeTab === 'polog' ? "flex-1 w-full overflow-hidden" : "p-8 w-full overflow-y-auto"}>
+        <div className={activeTab === 'sheets' || activeTab === 'polog' || activeTab === 'prlist' ? "flex-1 w-full overflow-hidden" : "p-8 w-full overflow-y-auto"}>
           {activeTab === 'polog' && <POLog initialPR={selectedPR} />}
+          {activeTab === 'prlist' && <POLog mode="prlist" />}
           {activeTab === 'users' && isAdmin && <UserManagement />}
           {activeTab === 'review-group' && <ReviewDashboard />}
           {activeTab === 'review2025' && <ReviewYear year="2025" action="25" onSelectPR={handleSelectPR} />}
@@ -362,7 +335,8 @@ const App = () => {
           {/* Force redirect if viewer somehow attempts to access sheets */}
           {activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
           {activeTab === 'sheets' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Sheets.</div>}
-          {activeTab === 'polog' && <POLog />}
+          {activeTab === 'project-details' && !isViewer && <Sheets darkMode={true} />}
+          {activeTab === 'project-details' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to view Project Details.</div>}
         </div>
       </main>
     </div>

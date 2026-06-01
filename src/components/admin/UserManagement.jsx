@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   IconUserPlus, 
-  IconUserCancel, 
-  IconUserCheck,
   IconShieldLock,
   IconTrash
 } from '@tabler/icons-react';
@@ -62,7 +60,8 @@ const UserManagement = () => {
         id: u.id || Math.random(),
         email: u.email || 'unknown@example.com',
         role: (u.status || u.role || 'viewer').toLowerCase(), 
-        status: 'active'
+        status: 'active',
+        lastLogin: u.Last_Login || u.lastLogin || 'Never'
       }));
 
       console.log('Mapped Users:', mappedUsers);
@@ -107,13 +106,6 @@ const UserManagement = () => {
     });
     setNewUser({ email: '', role: 'viewer', password: '', sendEmail: true });
     setIsAddingUser(false);
-  };
-
-  const toggleUserStatus = (id, currentStatus, userObj) => {
-    handleAction('Update', { 
-      ...userObj,
-      ui_status: currentStatus === 'active' ? 'paused' : 'active' 
-    });
   };
 
   const changeUserRole = (id, newRole, userObj) => {
@@ -294,13 +286,6 @@ const UserManagement = () => {
                   
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => toggleUserStatus(user.id, user.status, user)}
-                        className="p-1.5 rounded hover:bg-[rgba(255,255,255,0.08)] text-muted-foreground transition-colors"
-                        title={user.status === 'active' ? 'Pause User' : 'Activate User'}
-                      >
-                        {user.status === 'active' ? <IconUserCancel size={16} /> : <IconUserCheck size={16} />}
-                      </button>
                       <button 
                         onClick={() => deleteUser(user)}
                         className="p-1.5 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors"

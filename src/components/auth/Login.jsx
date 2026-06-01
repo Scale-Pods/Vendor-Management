@@ -30,6 +30,12 @@ const Login = ({ onLogin }) => {
 
       if (user) {
         const role = (user.status || 'viewer').toLowerCase();
+        const now = new Date();
+        const uaeOffset = 4 * 60;
+        const uae = new Date(now.getTime() + (now.getTimezoneOffset() + uaeOffset) * 60000);
+        const uaeStr = uae.toISOString().replace('Z', '').replace('T', ' ') + ' +04:00';
+        const logParams = new URLSearchParams({ action: 'Time', email: user.email, time: uaeStr });
+        fetch(`/api/n8n/webhook/24a10bda-d61b-4355-b26e-594726a2ec93?${logParams}`).catch(() => {});
         onLogin({ email: user.email, role });
       } else {
         setError('Invalid credentials. Please try again.');

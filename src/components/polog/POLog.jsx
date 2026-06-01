@@ -21,14 +21,14 @@ import {
   IconRefresh,
   IconChevronLeft,
   IconChevronRight,
-  IconChartPie,
+
   IconReceipt2,
   IconPackage,
   IconWallet,
   IconArrowUpRight,
   IconArrowsDiff
 } from '@tabler/icons-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import BoxLoader from '../ui/BoxLoader';
 
 
@@ -217,7 +217,7 @@ const POLogCard = ({ row }) => {
         <div className="text-[10px] text-[rgba(255,255,255,0.4)] flex items-center gap-1.5 bg-[#090e17] px-3 py-1.5 rounded-xl border border-[rgba(255,255,255,0.03)] w-fit mt-1">
           <span className="font-extrabold text-[#F59E0B] uppercase text-[8px]">Comparison:</span>
           <span className="line-through">AED {hasOriginalPrice}</span>
-          <span className="text-[#F59E0B]">â†’</span>
+          <span className="text-[#F59E0B]">&rarr;</span>
           <span className="text-white font-bold">AED {row['Net Price']}</span>
         </div>
       )}
@@ -293,16 +293,19 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.85)]">
-              {versions.map((v, idx) => (
+              {versions.slice(-2).map((v, idx, arr) => {
+                const label = idx === arr.length - 1 ? 'Current' : 'Previous';
+                return (
                 <tr key={idx} className="hover:bg-[rgba(255,255,255,0.01)] transition-colors">
-                  <td className="px-4 py-3 font-extrabold text-[#F59E0B] uppercase">{v.version}</td>
-                  <td className="px-4 py-3 font-semibold">{renderCell('qty', idx, versions)}</td>
-                  <td className="px-4 py-3 font-semibold">{renderCell('rate', idx, versions)}</td>
-                  <td className="px-4 py-3 font-semibold">{renderCell('price', idx, versions)}</td>
-                  <td className="px-4 py-3 font-semibold">{renderCell('vat', idx, versions)}</td>
-                  <td className="px-4 py-3 font-bold text-white">{renderCell('total', idx, versions)}</td>
+                  <td className="px-4 py-3 font-extrabold text-[#F59E0B] uppercase">{label}</td>
+                  <td className="px-4 py-3 font-semibold">{renderCell('qty', versions.indexOf(v), versions)}</td>
+                  <td className="px-4 py-3 font-semibold">{renderCell('rate', versions.indexOf(v), versions)}</td>
+                  <td className="px-4 py-3 font-semibold">{renderCell('price', versions.indexOf(v), versions)}</td>
+                  <td className="px-4 py-3 font-semibold">{renderCell('vat', versions.indexOf(v), versions)}</td>
+                  <td className="px-4 py-3 font-bold text-white">{renderCell('total', versions.indexOf(v), versions)}</td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
@@ -312,7 +315,7 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
 };
 
 /* â”€â”€â”€ Main Component â”€â”€â”€ */
-const POLog = () => {
+const POLog = ({ mode = 'dashboard' }) => {
   // Paste zone
   const [pasteText, setPasteText] = useState('');
   const [rateDetailsMap, setRateDetailsMap] = useState({}); // { [prRef]: text }
@@ -349,10 +352,14 @@ const POLog = () => {
   // Existing log
   const [logData, setLogData] = useState([]);
   const [logLoading, setLogLoading] = useState(false);
+  const [poMasterData, setPoMasterData] = useState([]);
+  const [poMasterLoading, setPoMasterLoading] = useState(false);
   const [logSearch, setLogSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState('All');
   const [enteredByFilter, setEnteredByFilter] = useState('All');
   const [spendPeriod, setSpendPeriod] = useState('Monthly');
+  const [drillMonth, setDrillMonth] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('All');
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const [expandedCardRef, setExpandedCardRef] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
@@ -631,7 +638,7 @@ const POLog = () => {
     return (
       <div className="space-y-1">
         <p className="text-[10px] text-white font-bold">
-          Detected: <span className="text-[#F59E0B]">{logsCount} PO Log</span> Â· <span className="text-[#F59E0B]">{ordersCount} Material Items</span>
+          Detected: <span className="text-[#F59E0B]">{logsCount} PO Log</span> &middot; <span className="text-[#F59E0B]">{ordersCount} Material Items</span>
         </p>
         <p className="text-[9px] text-[rgba(255,255,255,0.3)] font-bold italic pt-1">
           Click 'VIEW FULL REPORT' to open deep comparison view
@@ -688,7 +695,7 @@ const POLog = () => {
         {/* Header Summary */}
         <div className="flex items-center gap-3 bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.15)] rounded-2xl px-5 py-3 w-fit text-[#F59E0B] font-black text-xs uppercase tracking-widest animate-zoom-in">
           <span>{poLogs.length} PO Log</span>
-          <span className="opacity-40">Â·</span>
+          <span className="opacity-40">&middot;</span>
           <span>{purchaseOrders.length} Material Items</span>
         </div>
 
@@ -1391,9 +1398,42 @@ const POLog = () => {
     }
   }, []);
 
+  const fetchPoMasterData = useCallback(async () => {
+    setPoMasterLoading(true);
+    try {
+      const response = await fetch(`/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=merged`);
+      const json = await response.json();
+      let data = [];
+      if (Array.isArray(json)) {
+        data = json[0]?.data && Array.isArray(json[0].data) ? json[0].data : json;
+      } else if (json?.data && Array.isArray(json.data)) {
+        data = json.data;
+      }
+      setPoMasterData(data);
+    } catch (err) {
+      console.error('Failed to fetch purchase_orders:', err);
+    } finally {
+      setPoMasterLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchLogData();
-  }, [fetchLogData]);
+    fetchPoMasterData();
+  }, [fetchLogData, fetchPoMasterData]);
+
+  const getLatestTotal = (item) => {
+    for (let i = 5; i >= 2; i--) {
+      const val = item[`change${i}_total`] ?? item[`change${i}_price`] ?? item[`change${i}_Total`] ?? item[`change${i}_Price`];
+      if (val !== null && val !== undefined && val !== '') {
+        const num = parseFloat(String(val).replace(/,/g, ''));
+        if (!isNaN(num)) return num;
+      }
+    }
+    const fallback = item.change1_total ?? item.change1_price ?? item.change1_Total ?? item.change1_Price ?? item.Total ?? item.total ?? 0;
+    const num = parseFloat(String(fallback).replace(/,/g, ''));
+    return isNaN(num) ? 0 : num;
+  };
 
   const uniqueMonths = useMemo(() => {
     const months = new Set();
@@ -1437,6 +1477,14 @@ const POLog = () => {
     return Array.from(names).sort();
   }, [logData]);
 
+  const uniqueStatuses = useMemo(() => {
+    const statuses = new Set();
+    logData.forEach(row => {
+      if (row.Status) statuses.add(row.Status);
+    });
+    return Array.from(statuses).sort();
+  }, [logData]);
+
   const filteredLog = useMemo(() => {
     let result = logData;
 
@@ -1476,6 +1524,10 @@ const POLog = () => {
       result = result.filter(row => row['Entered By'] === enteredByFilter);
     }
 
+    if (statusFilter !== 'All') {
+      result = result.filter(row => row.Status === statusFilter);
+    }
+
     if (logSearch.trim()) {
       const q = logSearch.trim().toLowerCase();
       result = result.filter((row) =>
@@ -1484,104 +1536,119 @@ const POLog = () => {
     }
 
     return result;
-  }, [logData, logSearch, monthFilter, enteredByFilter]);
+  }, [logData, logSearch, monthFilter, enteredByFilter, statusFilter]);
 
   const dashboardStats = useMemo(() => {
-    if (!logData.length) return null;
-    
-    const stats = {
-      totalSpend: 0,
-      uniquePRs: new Set(),
-      uniqueSuppliers: new Set(),
-      statusDistribution: {
-        'Approved': 0,
-        'Open': 0,
-        'Rejected': 0,
-        'Pending': 0,
-        'Sent for approval': 0
-      },
-      processedRefs: new Set()
-    };
+    if (!poMasterData.length) return null;
 
-    const spendPeriodMap = {};
+    let totalSpend = 0;
+    const uniquePRs = new Set();
+    const uniqueSuppliers = new Set();
+
+    poMasterData.forEach(item => {
+      const total = getLatestTotal(item);
+      totalSpend += total;
+      const pr = item.pr || item.PR;
+      if (pr) uniquePRs.add(pr);
+      const supplier = item.change1_supplier || item.Supplier;
+      if (supplier) uniqueSuppliers.add(supplier);
+    });
+
+    return {
+      totalSpend,
+      uniquePRs: uniquePRs.size,
+      uniqueSuppliers: uniqueSuppliers.size,
+      totalItems: poMasterData.length,
+    };
+  }, [poMasterData]);
+
+  const parsePODate = useCallback((value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (!isNaN(d)) return d;
+    const parts = value.trim().split(/[\s\/\-\.]+/);
+    if (parts.length >= 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      let year = parseInt(parts[2], 10);
+      if (year < 100) year += 2000;
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900) {
+        return new Date(year, month - 1, day);
+      }
+    }
+    return null;
+  }, []);
+
+  const spendBreakdownData = useMemo(() => {
+    if (!logData.length) return [];
+    const periodMap = {};
+
+    const isDailyView = drillMonth !== null;
 
     logData.forEach(row => {
-      const ref = row.Ref || row.Reference;
-      const pr = row['Req Ref'] || row.Req_Ref;
-      const status = row.Status || 'Open';
-      const supplier = row.Supplier;
-      const month = row.Month || '';
-      const poDate = row['PO Date'] || '';
+      const net = parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
+      if (!net) return;
+      const poDate = row.po_date || row['PO Date'] || '';
+      const d = parsePODate(poDate);
+      if (!d) return;
 
-      // Track unique PRs and Suppliers regardless of Ref
-      if (pr) stats.uniquePRs.add(pr);
-      if (supplier) stats.uniqueSuppliers.add(supplier);
-
-      // Only sum spend and status for UNIQUE References to avoid double-counting item-level data
-      if (ref && !stats.processedRefs.has(ref)) {
-        stats.processedRefs.add(ref);
-        
-        const net = parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
-        stats.totalSpend += net;
-
-        const statusLower = status.toLowerCase();
-        if (statusLower.includes('sent for approval')) stats.statusDistribution['Sent for approval']++;
-        else if (statusLower.includes('approve')) stats.statusDistribution['Approved']++;
-        else if (statusLower.includes('reject')) stats.statusDistribution['Rejected']++;
-        else if (statusLower.includes('pending')) stats.statusDistribution['Pending']++;
-        else stats.statusDistribution['Open']++;
-
-        // Period breakdown for spend
-        let periodKey = '';
-        if (spendPeriod === 'Daily') {
-          periodKey = poDate || row['Entered Time'] || '';
-          if (periodKey) periodKey = periodKey.split(' ')[0];
-        } else if (spendPeriod === 'Yearly') {
-          const mParts = month.split('-');
-          periodKey = mParts[1] || '';
-        } else {
-          periodKey = month || '';
-        }
-        if (periodKey) {
-          spendPeriodMap[periodKey] = (spendPeriodMap[periodKey] || 0) + net;
-        }
+      if (isDailyView) {
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (monthKey !== drillMonth) return;
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        periodMap[dayKey] = (periodMap[dayKey] || 0) + net;
+      } else if (spendPeriod === 'Yearly') {
+        const key = String(d.getFullYear());
+        periodMap[key] = (periodMap[key] || 0) + net;
+      } else {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        periodMap[key] = (periodMap[key] || 0) + net;
       }
     });
 
-    const chartData = Object.entries(stats.statusDistribution)
-      .filter(entry => entry[1] > 0)
-      .map(([name, value]) => ({ name, value }));
-
-    const spendBreakdown = Object.entries(spendPeriodMap)
-      .sort((a, b) => {
-        if (spendPeriod === 'Monthly') {
-          const monthOrder = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-          const aP = a[0].split('-'), bP = b[0].split('-');
-          const ay = parseInt(aP[1])||0, by = parseInt(bP[1])||0;
-          if (ay !== by) return ay - by;
-          return (monthOrder[aP[0]]||0) - (monthOrder[bP[0]]||0);
-        }
-        return a[0].localeCompare(b[0]);
-      })
+    return Object.entries(periodMap)
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([period, value]) => ({ period, value }));
+  }, [logData, spendPeriod, drillMonth, parsePODate]);
 
-    const COLORS = {
-      'Approved': '#10B981',
-      'Open': '#F59E0B',
-      'Pending': '#3B82F6',
-      'Rejected': '#EF4444',
-      'Sent for approval': '#8B5CF6'
-    };
+  const projectData = useMemo(() => {
+    if (!poMasterData.length) return [];
+    const projMap = {};
+    poMasterData.forEach(item => {
+      const project = item.project || item.Project || 'Unknown';
+      const total = getLatestTotal(item);
+      if (!projMap[project]) projMap[project] = { project, totalInvested: 0, prCount: new Set(), itemCount: 0 };
+      projMap[project].totalInvested += total;
+      const pr = item.pr || item.PR;
+      if (pr) projMap[project].prCount.add(pr);
+      projMap[project].itemCount++;
+    });
+    return Object.values(projMap)
+      .map(p => ({ ...p, prCount: p.prCount.size }))
+      .sort((a, b) => b.totalInvested - a.totalInvested);
+  }, [poMasterData, getLatestTotal]);
 
-    return {
-      totalSpend: stats.totalSpend,
-      uniquePRs: stats.uniquePRs.size,
-      uniqueSuppliers: stats.uniqueSuppliers.size,
-      chartData,
-      spendBreakdown,
-      colors: COLORS
-    };
-  }, [logData, spendPeriod]);
+  const topMaterials = useMemo(() => {
+    if (!poMasterData.length) return [];
+    const freqMap = {};
+    poMasterData.forEach(item => {
+      const desc = (item.Description || item.description || '').trim();
+      const key = desc || 'Unknown';
+      if (!freqMap[key]) {
+        freqMap[key] = { description: desc || 'Unknown', count: 0, totalQty: 0, totalSpend: 0, suppliers: new Set() };
+      }
+      freqMap[key].count++;
+      const qty = parseFloat(String(item.Qty || item.Req_Qty || '0').replace(/,/g, '')) || 0;
+      freqMap[key].totalQty += qty;
+      freqMap[key].totalSpend += getLatestTotal(item);
+      const sup = item.change1_supplier || item.Supplier;
+      if (sup) freqMap[key].suppliers.add(sup);
+    });
+    return Object.values(freqMap)
+      .map(m => ({ ...m, suppliers: m.suppliers.size }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [poMasterData, getLatestTotal]);
 
   const formatLargeCurrency = (value) => {
     if (value >= 1000000) return `AED ${(value / 1000000).toFixed(1)}M`;
@@ -1803,6 +1870,7 @@ const POLog = () => {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="flex-1 overflow-y-auto p-6 space-y-10">
+        {mode !== 'prlist' && (<>
         {/* â•â•â•â•â•â•â•â•â•â•â• DASHBOARD OVERVIEW â•â•â•â•â•â•â•â•â•â•â• */}
         {dashboardStats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 stagger-item" style={{ animationDelay: '0ms' }}>
@@ -1836,57 +1904,47 @@ const POLog = () => {
             <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Trusted vendor network size</p>
           </div>
 
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl h-[240px] flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Status Distribution</p>
-              <IconChartPie size={16} className="text-[#F59E0B]" />
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconClipboardData size={64} className="text-[#F59E0B]" />
             </div>
-            <div className="flex-1 w-full min-h-0 relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={dashboardStats.chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={75}
-                    paddingAngle={5}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {dashboardStats.chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={dashboardStats.colors[entry.name]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip 
-                    contentStyle={{ background: '#121824', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
-                    itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                    formatter={(value, name) => [`${value} PRs`, name]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-2">
-                <span className="text-xl font-black text-white">{dashboardStats.uniquePRs}</span>
-                <span className="text-[8px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Total</span>
-              </div>
-            </div>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Line Items</p>
+            <h4 className="text-3xl font-black text-white">{dashboardStats.totalItems?.toLocaleString()}</h4>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Items across all projects</p>
           </div>
         </div>
         )}
 
-        {/* Spend Breakdown + Status Summary */}
-        {dashboardStats && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger-item" style={{ animationDelay: '50ms' }}>
-          <div className="lg:col-span-2 bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl">
+        {/* Spend Breakdown by Period */}
+        {spendBreakdownData.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '50ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl">
             <div className="flex items-center justify-between mb-6">
-              <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Spend Breakdown</p>
+              <div className="flex items-center gap-3">
+                {drillMonth ? (
+                  <button
+                    onClick={() => setDrillMonth(null)}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider text-[#F59E0B] hover:bg-[rgba(245,158,11,0.1)] transition-all"
+                  >
+                    <IconChevronLeft size={14} /> Back
+                  </button>
+                ) : null}
+                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">
+                  {drillMonth
+                    ? new Date(drillMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })
+                    : 'Spend Breakdown'}
+                </p>
+                {!drillMonth && spendPeriod === 'Monthly' && (
+                  <span className="text-[8px] text-[rgba(255,255,255,0.2)] font-medium ml-1">click month bar to drill</span>
+                )}
+              </div>
               <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] rounded-lg p-0.5">
-                {['Daily', 'Monthly', 'Yearly'].map(p => (
+                {['Monthly', 'Yearly'].map(p => (
                   <button
                     key={p}
-                    onClick={() => setSpendPeriod(p)}
+                    onClick={() => { setSpendPeriod(p); setDrillMonth(null); }}
                     className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${
-                      spendPeriod === p
+                      spendPeriod === p && !drillMonth
                         ? 'bg-[#F59E0B] text-black shadow-lg'
                         : 'text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)]'
                     }`}
@@ -1897,9 +1955,9 @@ const POLog = () => {
               </div>
             </div>
             <div className="h-[200px]">
-              {dashboardStats.spendBreakdown.length > 0 ? (
+              {spendBreakdownData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dashboardStats.spendBreakdown} margin={{ top: 5, right: 10, left: 10, bottom: 20 }}>
+                  <BarChart data={spendBreakdownData} margin={{ top: 5, right: 10, left: 10, bottom: 20 }}>
                     <XAxis
                       dataKey="period"
                       stroke="rgba(255,255,255,0.2)"
@@ -1907,9 +1965,15 @@ const POLog = () => {
                       axisLine={false}
                       tickLine={false}
                       tick={{ fill: 'rgba(255,255,255,0.4)' }}
-                      angle={spendPeriod === 'Daily' ? -45 : 0}
-                      textAnchor={spendPeriod === 'Daily' ? 'end' : 'middle'}
-                      height={spendPeriod === 'Daily' ? 60 : 30}
+                      tickFormatter={(val) => {
+                        if (drillMonth) return val;
+                        const [y, m] = val.split('-');
+                        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        return `${months[parseInt(m, 10) - 1]}-${y.slice(2)}`;
+                      }}
+                      angle={drillMonth ? -45 : 0}
+                      textAnchor={drillMonth ? 'end' : 'middle'}
+                      height={drillMonth ? 60 : 30}
                     />
                     <YAxis
                       stroke="rgba(255,255,255,0.2)"
@@ -1926,7 +1990,18 @@ const POLog = () => {
                       itemStyle={{ color: '#F59E0B', fontWeight: 'bold' }}
                       formatter={(v) => [`AED ${v.toLocaleString()}`, 'Spend']}
                     />
-                    <Bar dataKey="value" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={spendPeriod === 'Daily' ? 20 : 32} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={drillMonth ? 20 : 32}>
+                      {spendBreakdownData.map((entry) => (
+                        <Cell
+                          key={entry.period}
+                          fill="#F59E0B"
+                          style={{ cursor: spendPeriod === 'Monthly' && !drillMonth ? 'pointer' : 'default' }}
+                          onClick={() => {
+                            if (spendPeriod === 'Monthly' && !drillMonth) setDrillMonth(entry.period);
+                          }}
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -1936,39 +2011,121 @@ const POLog = () => {
               )}
             </div>
           </div>
+        </div>
+        )}
 
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl">
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4">Status Summary</p>
-            <div className="space-y-3">
-              {dashboardStats.chartData.map((entry) => (
-                <div key={entry.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dashboardStats.colors[entry.name] }} />
-                    <span className="text-[12px] font-semibold text-[rgba(255,255,255,0.7)]">{entry.name}</span>
-                  </div>
-                  <span className="text-[13px] font-black text-white">{entry.value}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 pt-4 border-t border-[rgba(255,255,255,0.05)] grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <p className="text-[18px] font-black text-white">{dashboardStats.uniqueSuppliers}</p>
-                <p className="text-[8px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Suppliers</p>
+        {/* Project Wise Money Invested */}
+        {projectData.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '75ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-6 rounded-full bg-[#10B981]" />
+                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project Wise Money Invested</p>
               </div>
-              <div className="text-center">
-                <p className="text-[18px] font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</p>
-                <p className="text-[8px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Total Spend</p>
-              </div>
+              <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
+                {poMasterData.length} line items
+              </span>
             </div>
+            {poMasterLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-6 h-6 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-[rgba(255,255,255,0.06)]">
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">#</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Project</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Invested (AED)</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">PRs</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Line Items</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
+                  {projectData.map((p, idx) => (
+                    <tr key={p.project} className="hover:bg-[rgba(16,185,129,0.03)] transition-colors">
+                      <td className="py-3 text-[11px] text-[rgba(255,255,255,0.25)] font-bold">{idx + 1}</td>
+                      <td className="py-3 text-[13px] text-white font-bold">{p.project}</td>
+                      <td className="py-3 text-[13px] text-[#10B981] font-black text-right tabular-nums">
+                        {p.totalInvested >= 1000000
+                          ? `AED ${(p.totalInvested / 1000000).toFixed(2)}M`
+                          : `AED ${p.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      </td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{p.prCount}</td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{p.itemCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            )}
           </div>
         </div>
         )}
+
+        {/* Materials Maximum Time Purchased */}
+        {topMaterials.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '100ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
+                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Materials Maximum Time Purchased</p>
+              </div>
+              <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
+                Top {Math.min(topMaterials.length, 10)} of {poMasterData.length} items
+              </span>
+            </div>
+            {poMasterLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-6 h-6 border-2 border-[#F59E0B] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-[rgba(255,255,255,0.06)]">
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">#</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Material Description</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Times Ordered</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Qty</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Spend (AED)</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Suppliers</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
+                  {topMaterials.map((m, idx) => (
+                    <tr key={m.description} className="hover:bg-[rgba(245,158,11,0.03)] transition-colors">
+                      <td className="py-3 text-[11px] text-[rgba(255,255,255,0.25)] font-bold">{idx + 1}</td>
+                      <td className="py-3 text-[13px] text-white font-bold max-w-[300px] truncate" title={m.description}>{m.description}</td>
+                      <td className="py-3 text-[13px] text-white font-black text-right">{m.count}x</td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right tabular-nums">{m.totalQty.toLocaleString()}</td>
+                      <td className="py-3 text-[13px] text-[#10B981] font-black text-right tabular-nums">
+                        {m.totalSpend >= 1000000
+                          ? `AED ${(m.totalSpend / 1000000).toFixed(2)}M`
+                          : m.totalSpend >= 1000
+                            ? `AED ${(m.totalSpend / 1000).toFixed(0)}K`
+                            : `AED ${m.totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      </td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{m.suppliers}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            )}
+          </div>
+        </div>
+        )}
+
         <div className="stagger-item" style={{ animationDelay: '0ms' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
             <h2 className="text-lg font-bold text-white tracking-tight">Import PO Data</h2>
             <span className="text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.15em] ml-2">
-              TWO-STEP PASTE FROM EXCEL
+              STEPS TO UPLOAD DATA
             </span>
           </div>
 
@@ -2029,7 +2186,7 @@ const POLog = () => {
                       {parsedRows.length} row{parsedRows.length > 1 ? 's' : ''} detected
                     </span>
                     <span className="text-[10px] text-[rgba(255,255,255,0.2)] ml-1">
-                      Â· {PO_COLUMNS.length} columns mapped
+                      &middot; {PO_COLUMNS.length} columns mapped
                     </span>
                   </div>
                 ) : (
@@ -2604,7 +2761,7 @@ const POLog = () => {
                                 <div className="flex items-center gap-2">
                                   <IconCheck size={12} className="text-[#10B981]" />
                                   <span className="text-[10px] font-bold text-[#10B981]">
-                                    {parsedCount} items detected Â· Scroll down for preview
+                                    {parsedCount} items detected &middot; Scroll down for preview
                                   </span>
                                 </div>
                                 <span className="text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-widest">
@@ -2809,8 +2966,8 @@ const POLog = () => {
             </div>
           </div>
         )}
-
-        {/* â•â•â•â•â•â•â•â•â•â•â• EXISTING PO LOG â•â•â•â•â•â•â•â•â•â•â• */}
+        </>)}
+        {mode === 'prlist' && (
         <div className="stagger-item" style={{ animationDelay: '200ms' }}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
             <div className="flex items-center gap-3">
@@ -2823,10 +2980,8 @@ const POLog = () => {
               )}
             </div>
 
-            {/* Search bar & Filters */}
             <div className="flex items-center gap-4 flex-wrap">
-              {/* Month Dropdown */}
-              <div 
+              <div
                 className="relative flex items-center px-3 py-2 rounded-lg"
                 style={{
                   background: 'rgba(255,255,255,0.04)',
@@ -2851,9 +3006,8 @@ const POLog = () => {
                 </div>
               </div>
 
-              {/* Entered By Dropdown */}
               {uniqueEnteredBy.length > 0 && (
-              <div 
+              <div
                 className="relative flex items-center px-3 py-2 rounded-lg"
                 style={{
                   background: 'rgba(255,255,255,0.04)',
@@ -2879,7 +3033,33 @@ const POLog = () => {
               </div>
               )}
 
-              {/* Search bar */}
+              {uniqueStatuses.length > 0 && (
+              <div
+                className="relative flex items-center px-3 py-2 rounded-lg"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <select
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setDisplayCount(PAGE_SIZE); }}
+                  className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
+                  style={{ minWidth: '120px' }}
+                >
+                  <option value="All" className="bg-[#0f1520] text-white">All Statuses</option>
+                  {uniqueStatuses.map(st => (
+                    <option key={st} value={st} className="bg-[#0f1520] text-white">{st}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+              )}
+
               <div
                 className="relative flex items-center gap-2 px-3 py-2 rounded-lg w-full sm:w-auto sm:min-w-[200px] lg:w-[280px]"
                 style={{
@@ -2889,11 +3069,10 @@ const POLog = () => {
               >
                 <IconSearch size={14} className="text-[rgba(255,255,255,0.2)] shrink-0" />
                 <input
-                  ref={searchInputRef}
                   type="text"
                   value={logSearch}
                   onChange={(e) => { setLogSearch(e.target.value); setDisplayCount(PAGE_SIZE); }}
-                  placeholder="Search PR Numberâ€¦ (Ctrl+F)"
+                  placeholder="Search PR Number... (Ctrl+F)"
                   className="w-full bg-transparent text-[12px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.15)] outline-none"
                 />
                 {logSearch && (
@@ -2921,7 +3100,6 @@ const POLog = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Card Grid Layout */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {visibleLog.map((row, idx) => {
                   const isExpanded = expandedCardRef === row.Ref;
@@ -2931,8 +3109,8 @@ const POLog = () => {
                       onClick={() => toggleExpandCard(row)}
                       onDoubleClick={() => openDetailedModal(row)}
                       className={`relative rounded-2xl p-6 cursor-pointer overflow-hidden transition-all duration-300 border ${
-                        isExpanded 
-                          ? 'border-[#F59E0B] shadow-[0_0_20px_rgba(245,158,11,0.15)] bg-[#1e2538]' 
+                        isExpanded
+                          ? 'border-[#F59E0B] shadow-[0_0_20px_rgba(245,158,11,0.15)] bg-[#1e2538]'
                           : 'border-[rgba(255,255,255,0.06)] bg-[#1a1f2e] hover:border-[#F59E0B] hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]'
                       }`}
                       style={{
@@ -2940,7 +3118,6 @@ const POLog = () => {
                         minHeight: isExpanded ? '440px' : '230px',
                       }}
                     >
-                      {/* Top Header Row */}
                       <div className="flex justify-between items-start mb-4">
                         <div className="flex items-center gap-2 max-w-full overflow-hidden">
                           <h3 className="text-base font-black text-[#F59E0B] tracking-tight uppercase truncate mr-2" title={row.Ref}>
@@ -2953,17 +3130,16 @@ const POLog = () => {
                           )}
                         </div>
                         <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 ${
-                          row.Status === 'Approved' 
-                            ? 'bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.3)]' 
-                            : row.Status === 'Open' 
-                            ? 'bg-[rgba(245,158,11,0.15)] text-[#F59E0B] border border-[rgba(245,158,11,0.3)]' 
+                          row.Status === 'Approved'
+                            ? 'bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.3)]'
+                            : row.Status === 'Open'
+                            ? 'bg-[rgba(245,158,11,0.15)] text-[#F59E0B] border border-[rgba(245,158,11,0.3)]'
                             : 'bg-[rgba(239,68,68,0.15)] text-[#EF4444] border border-[rgba(239,68,68,0.3)]'
                         }`}>
                           {row.Status || 'Open'}
                         </span>
                       </div>
 
-                      {/* Second Line: Project & Supplier */}
                       <div className="mb-4">
                         <div className="flex items-center justify-between gap-3 text-white font-bold text-sm">
                           <div className="flex items-center gap-1.5 truncate" title={row.Project}>
@@ -2981,7 +3157,6 @@ const POLog = () => {
                         </div>
                       </div>
 
-                      {/* Bottom Row Chips: Key Metrics */}
                       <div className="flex flex-wrap gap-2 mb-4">
                         <div className="flex items-center gap-1 bg-[rgba(245,158,11,0.06)] border border-[rgba(245,158,11,0.15)] rounded-lg px-2.5 py-1 text-[#F59E0B]">
                           <span className="text-[9px] font-extrabold uppercase opacity-60">Net:</span>
@@ -2997,7 +3172,6 @@ const POLog = () => {
                         </div>
                       </div>
 
-                      {/* Inline Expansion Area */}
                       {isExpanded && (
                         <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)] space-y-3 animate-slide-down">
                           <div className="grid grid-cols-2 gap-4">
@@ -3010,7 +3184,7 @@ const POLog = () => {
                               <p className="text-[11px] text-white font-medium">{row['QC Ref.'] || 'N/A'}</p>
                             </div>
                           </div>
-                          
+
                           <div>
                             <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">Doc. Remarks</p>
                             <p className="text-[11px] text-[rgba(255,255,255,0.7)] font-medium italic truncate">
@@ -3019,11 +3193,10 @@ const POLog = () => {
                             </p>
                           </div>
 
-                          {/* Webhook insights inside the expanded card */}
                           <div className="mt-4 pt-3 border-t border-[rgba(255,255,255,0.06)]">
                             <div className="flex items-center justify-between mb-2">
                               <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-wider">PR List Insights</p>
-                              <button 
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleFetchPrData(row, true);
@@ -3053,7 +3226,7 @@ const POLog = () => {
                           </div>
 
                           <div className="flex items-center justify-between pt-2">
-                            <button 
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openDetailedModal(row);
@@ -3067,19 +3240,18 @@ const POLog = () => {
                         </div>
                       )}
 
-                      {/* Bottom Footer Muted text */}
                       {!isExpanded && (
                         <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between border-t border-[rgba(255,255,255,0.04)] pt-3 text-[10px] text-[rgba(255,255,255,0.35)] font-bold truncate">
                           <div className="flex items-center gap-1.5 truncate">
                             <IconUser size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
                             <span className="truncate">{row['Entered By'] || 'N/A'}</span>
                           </div>
-                          <span className="mx-1.5 opacity-20">â€¢</span>
+                          <span className="mx-1.5 opacity-20">&#8226;</span>
                           <div className="flex items-center gap-1.5 truncate">
                             <IconClock size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
                             <span className="truncate">{row['Entered Time'] || 'N/A'}</span>
                           </div>
-                          <span className="mx-1.5 opacity-20">â€¢</span>
+                          <span className="mx-1.5 opacity-20">&#8226;</span>
                           <div className="flex items-center gap-1.5 truncate">
                             <IconCalendar size={10} className="shrink-0 text-[rgba(255,255,255,0.2)]" />
                             <span className="truncate">{row['PO Date'] || 'N/A'}</span>
@@ -3091,13 +3263,12 @@ const POLog = () => {
                 })}
               </div>
 
-              {/* Dynamic Load More Action Bar */}
               {displayCount < filteredLog.length && (
                 <div className="flex flex-col items-center justify-center pt-8 pb-12">
                   <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-semibold mb-3 tracking-wider uppercase">
                     Showing {Math.min(displayCount, filteredLog.length)} of {filteredLog.length} PO Records
                   </p>
-                  <button 
+                  <button
                     onClick={() => setDisplayCount(prev => prev + 60)}
                     className="px-8 py-3 bg-[rgba(245,158,11,0.08)] hover:bg-[#F59E0B] text-[#F59E0B] hover:text-black border border-[rgba(245,158,11,0.2)] hover:border-[#F59E0B] rounded-xl transition-all duration-300 font-bold text-xs uppercase tracking-widest shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center gap-2"
                   >
@@ -3108,6 +3279,7 @@ const POLog = () => {
             </div>
           )}
         </div>
+        )}
       </div>
       {/* Verification Modal Dialog */}
       {showVerifyDialog && (
@@ -3308,7 +3480,7 @@ const POLog = () => {
                         <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Initial Price (Baseline)</p>
                         <p className="text-sm font-semibold text-[rgba(255,255,255,0.45)] line-through mt-0.5">AED {originalPriceStr}</p>
                       </div>
-                      <div className="text-sm text-[rgba(255,255,255,0.2)] font-black mt-3 md:mt-0">âž”</div>
+                      <div className="text-sm text-[rgba(255,255,255,0.2)] font-black mt-3 md:mt-0">&rarr;</div>
                       <div className="text-center md:text-left">
                         <p className="text-[9px] font-bold text-[#F59E0B] uppercase tracking-widest">Current Price (Net)</p>
                         <p className="text-sm font-black text-white mt-0.5">AED {netPriceStr}</p>
@@ -3360,7 +3532,7 @@ const POLog = () => {
                           <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
                             netVal > origVal ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
                           }`}>
-                            {netVal > origVal ? 'â–²' : 'â–¼'} {Math.abs(percentChange).toFixed(1)}%
+                            {netVal > origVal ? '\u25B2' : '\u25BC'} {Math.abs(percentChange).toFixed(1)}%
                           </span>
                         )}
                       </div>
