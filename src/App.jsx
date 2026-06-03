@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   IconBell,
-  IconTable,
   IconClipboardList,
-  IconClipboardCheck,
   IconCalendar,
   IconChevronDown,
   IconLogout,
@@ -11,8 +9,10 @@ import {
   IconShieldLock,
   IconMenu2,
   IconX,
-  IconFileText,
-  IconBuilding
+  IconLayoutDashboard,
+  IconDatabaseImport,
+  IconPackage,
+  IconUpload
 } from '@tabler/icons-react';
 import VendorAnalysis from './components/vendors/VendorAnalysis';
 import PRTable from './components/records/PRTable';
@@ -21,6 +21,7 @@ import Sheets from './components/sheets/Sheets';
 import POLog from './components/polog/POLog';
 import ReviewYear from './components/dashboard/ReviewYear';
 import ReviewDashboard from './components/dashboard/ReviewDashboard';
+import QuoteRegister from './components/quotes/QuoteRegister';
 import { SearchBar } from './components/ui/search-bar';
 import Login from './components/auth/Login';
 import UserManagement from './components/admin/UserManagement';
@@ -69,24 +70,46 @@ const App = () => {
     { id: 'users', label: 'User Management', icon: IconUsers },
   ];
 
-  const primeHorizonNav = [
-    { id: 'polog', label: 'PR QUOTE DATA', icon: IconClipboardList },
-    { id: 'prlist', label: 'PR ORDER REQUEST', icon: IconFileText },
-    { 
-      id: 'review-group', 
-      label: 'REVIEW DATA', 
-      icon: IconClipboardCheck,
-      children: [
-        { id: 'review2025', label: '2025 Cycle', icon: IconCalendar },
-        { id: 'review2026', label: '2026 Cycle', icon: IconCalendar },
-        { id: 'sheets', label: 'Sheets', icon: IconTable, restricted: true },
-      ]
-    },
-    { id: 'project-details', label: 'PROJECT DETAILS', icon: IconBuilding },
+  // Purchase Order Request group
+  const poRequestNav = [
+    { id: 'po-dashboard', label: 'Dashboard', icon: IconLayoutDashboard },
+    { id: 'polog', label: 'Data + Upload Data', icon: IconDatabaseImport },
+    { id: 'prlist', label: 'Material Request', icon: IconPackage },
   ];
 
-  const [isReviewExpanded, setIsReviewExpanded] = useState(false);
+  // Review Data group
+  const reviewDataNav = [
+    { 
+      id: 'review-dashboard-group', 
+      label: 'Dashboard', 
+      icon: IconLayoutDashboard,
+      children: [
+        { id: 'review2025', label: '2025', icon: IconCalendar },
+        { id: 'review2026', label: '2026', icon: IconCalendar },
+      ]
+    },
+    { id: 'sheets', label: 'Upload Data', icon: IconUpload, restricted: true },
+  ];
+
+  // Purchase Quote Register group
+  const quoteRegisterNav = [
+    { id: 'qr-dashboard', label: 'Dashboard', icon: IconLayoutDashboard },
+    { id: 'qr-data', label: 'Data', icon: IconClipboardList },
+    { id: 'qr-material', label: 'Material', icon: IconPackage },
+    { id: 'qr-upload', label: 'Upload Data', icon: IconUpload },
+  ];
+
+  const [expandedGroups, setExpandedGroups] = useState({
+    poRequest: true,
+    reviewData: false,
+    quoteRegister: false,
+    reviewDashboard: false,
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const toggleGroup = (group) => {
+    setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
 
   const NavItem = ({ item, isSubItem, hasChildren, isExpanded, onExpand }) => {
     const isActive = activeTab === item.id;
@@ -97,9 +120,17 @@ const App = () => {
       <div>
         <button
           onClick={() => {
-            setActiveTab(item.id);
             if (hasChildren) {
-              onExpand(true);
+              onExpand(!isExpanded);
+              // Also set the first child as active if expanding and no child is active
+              if (!isExpanded && item.children) {
+                const anyChildActive = item.children.some(c => c.id === activeTab);
+                if (!anyChildActive) {
+                  setActiveTab(item.children[0].id);
+                }
+              }
+            } else {
+              setActiveTab(item.id);
             }
           }}
           className={`relative w-full flex items-center gap-3 px-4 py-[11px] transition-all duration-200 group text-left ${
@@ -138,6 +169,39 @@ const App = () => {
     );
   };
 
+  /* ─── Sidebar Section Header (collapsible group) ─── */
+  const SidebarSection = ({ title, groupKey, items, expandState, onExpandItem }) => (
+    <div className="mb-1">
+      <button 
+        onClick={() => toggleGroup(groupKey)}
+        className="w-full flex items-center justify-between px-2 pt-5 pb-2 group cursor-pointer"
+      >
+        <span className="text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)] group-hover:text-[rgba(255,255,255,0.4)] transition-colors">
+          {title}
+        </span>
+        <IconChevronDown 
+          size={12} 
+          className={`transition-transform duration-300 text-[rgba(255,255,255,0.15)] group-hover:text-[rgba(255,255,255,0.3)] ${
+            expandedGroups[groupKey] ? 'rotate-180' : ''
+          }`} 
+        />
+      </button>
+      {expandedGroups[groupKey] && (
+        <nav className="space-y-[2px] animate-in slide-in-from-top-2 duration-200">
+          {items.map((item) => (
+            <NavItem 
+              key={item.id} 
+              item={item} 
+              hasChildren={!!item.children}
+              isExpanded={expandState?.[item.id]}
+              onExpand={(val) => onExpandItem?.(item.id, val)}
+            />
+          ))}
+        </nav>
+      )}
+    </div>
+  );
+
   if (!user) {
     return <Login onLogin={handleLogin} />;
   }
@@ -155,12 +219,12 @@ const App = () => {
         className="fixed inset-y-0 left-0 z-50 glass-panel !rounded-none border-r border-[rgba(255,255,255,0.08)] hidden md:flex flex-col"
       >
         {/* Logo — ScalePods wordmark, untouched */}
-        <div className="px-6 pt-8 pb-8 flex items-center justify-center border-b border-[rgba(255,255,255,0.08)]">
+        <div className="px-6 pt-4 pb-4 flex items-center justify-center border-b border-[rgba(255,255,255,0.08)]">
           <img
             src="/scalepods-logo.png"
             alt="ScalePods"
             style={{
-              width: '220px',
+              width: '180px',
               height: 'auto',
               display: 'block',
               filter: 'invert(1)',
@@ -172,21 +236,30 @@ const App = () => {
 
         {/* Nav Groups */}
         <div className="flex-1 overflow-y-auto px-3 pt-2">
-          {/* PRIME HORIZON group */}
-          <div className="px-2 pt-5 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">
-            PRIME HORIZON
-          </div>
-          <nav className="space-y-[2px]">
-            {primeHorizonNav.map((item) => (
-              <NavItem 
-                key={item.id} 
-                item={item} 
-                hasChildren={!!item.children} 
-                isExpanded={isReviewExpanded}
-                onExpand={setIsReviewExpanded}
-              />
-            ))}
-          </nav>
+          {/* Purchase Order Request */}
+          <SidebarSection 
+            title="Purchase Order Request" 
+            groupKey="poRequest" 
+            items={poRequestNav} 
+          />
+
+          {/* Review Data */}
+          <SidebarSection 
+            title="Review Data" 
+            groupKey="reviewData" 
+            items={reviewDataNav}
+            expandState={{ 'review-dashboard-group': expandedGroups.reviewDashboard }}
+            onExpandItem={(id) => {
+              if (id === 'review-dashboard-group') toggleGroup('reviewDashboard');
+            }}
+          />
+
+          {/* Purchase Quote Register */}
+          <SidebarSection 
+            title="Purchase Quote Register" 
+            groupKey="quoteRegister" 
+            items={quoteRegisterNav} 
+          />
         </div>
 
         {/* Bottom Section */}
@@ -260,12 +333,25 @@ const App = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 pt-2">
-              <div className="px-2 pt-5 pb-2 text-[9px] font-bold uppercase tracking-[1px] text-[rgba(255,255,255,0.25)]">PRIME HORIZON</div>
-              <nav className="space-y-[2px]">
-                {primeHorizonNav.map((item) => (
-                  <NavItem key={item.id} item={item} hasChildren={!!item.children} isExpanded={isReviewExpanded} onExpand={setIsReviewExpanded} />
-                ))}
-              </nav>
+              <SidebarSection 
+                title="Purchase Order Request" 
+                groupKey="poRequest" 
+                items={poRequestNav} 
+              />
+              <SidebarSection 
+                title="Review Data" 
+                groupKey="reviewData" 
+                items={reviewDataNav}
+                expandState={{ 'review-dashboard-group': expandedGroups.reviewDashboard }}
+                onExpandItem={(id, val) => {
+                  if (id === 'review-dashboard-group') toggleGroup('reviewDashboard');
+                }}
+              />
+              <SidebarSection 
+                title="Purchase Quote Register" 
+                groupKey="quoteRegister" 
+                items={quoteRegisterNav} 
+              />
             </div>
 
             <div className="px-3 py-6 border-t border-[rgba(255,255,255,0.08)] space-y-4">
@@ -321,22 +407,32 @@ const App = () => {
         </header>
 
         {/* Dynamic Content */}
-        <div className={activeTab === 'sheets' || activeTab === 'polog' || activeTab === 'prlist' ? "flex-1 w-full overflow-hidden" : "p-8 w-full overflow-y-auto"}>
+        <div className={activeTab === 'sheets' || activeTab === 'polog' || activeTab === 'prlist' ? "flex-1 w-full overflow-hidden" : "flex-1 w-full overflow-y-auto"}>
+          {/* Purchase Order Request */}
+          {activeTab === 'po-dashboard' && <ReviewDashboard />}
           {activeTab === 'polog' && <POLog initialPR={selectedPR} />}
           {activeTab === 'prlist' && <POLog mode="prlist" />}
-          {activeTab === 'users' && isAdmin && <UserManagement />}
-          {activeTab === 'review-group' && <ReviewDashboard />}
+
+          {/* Review Data */}
           {activeTab === 'review2025' && <ReviewYear year="2025" action="25" onSelectPR={handleSelectPR} />}
           {activeTab === 'review2026' && <ReviewYear year="2026" action="26" onSelectPR={handleSelectPR} />}
+          {activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
+          {activeTab === 'sheets' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Sheets.</div>}
+
+          {/* Purchase Quote Register */}
+          {activeTab === 'qr-dashboard' && <QuoteRegister subView="dashboard" />}
+          {activeTab === 'qr-data' && <QuoteRegister subView="data" />}
+          {activeTab === 'qr-material' && <QuoteRegister subView="material" />}
+          {activeTab === 'qr-upload' && <QuoteRegister subView="upload" />}
+
+          {/* Admin */}
+          {activeTab === 'users' && isAdmin && <UserManagement />}
+
+          {/* Legacy routes */}
           {activeTab === 'records' && <PRTable />}
           {activeTab === 'changes' && <PRTable showChangesOnly={true} />}
           {activeTab === 'vendors' && <VendorAnalysis />}
           {activeTab === 'insights' && <InsightsPanel />}
-          {/* Force redirect if viewer somehow attempts to access sheets */}
-          {activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
-          {activeTab === 'sheets' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Sheets.</div>}
-          {activeTab === 'project-details' && !isViewer && <Sheets darkMode={true} />}
-          {activeTab === 'project-details' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to view Project Details.</div>}
         </div>
       </main>
     </div>
