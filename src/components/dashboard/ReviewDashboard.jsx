@@ -315,7 +315,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
         <div>
           <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
             <IconLayoutDashboard className="text-[#c8922a]" size={32} />
-            Audit & Review Center
+            Purchase Orders Dashboard
           </h2>
           <p className="text-[rgba(255,255,255,0.4)] text-sm font-medium mt-1">
             Real-time financial discrepancy analysis and PR optimization tracking.
