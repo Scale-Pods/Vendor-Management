@@ -23,7 +23,6 @@ import POLog from './components/polog/POLog';
 import ReviewYear from './components/dashboard/ReviewYear';
 import ReviewDashboard from './components/dashboard/ReviewDashboard';
 import QuoteRegister from './components/quotes/QuoteRegister';
-import { SearchBar } from './components/ui/search-bar';
 import Login from './components/auth/Login';
 import UserManagement from './components/admin/UserManagement';
 import Overview from './components/dashboard/Overview';
@@ -37,7 +36,6 @@ const App = () => {
   });
   const [activeTab, setActiveTab] = useState('polog');
   const [selectedPR, setSelectedPR] = useState(null);
-  const [globalSearch, setGlobalSearch] = useState('');
 
   // Diagnostic logging to track role changes
   useEffect(() => {
@@ -94,7 +92,7 @@ const App = () => {
         { id: 'review2026', label: '2026', icon: IconCalendar },
       ]
     },
-    { id: 'sheets', label: 'Upload Data', icon: IconUpload, restricted: true },
+    { id: 'sheets', label: 'Sheet View', icon: IconUpload, restricted: true },
   ];
 
   // Purchase Quote Register group
@@ -392,9 +390,6 @@ const App = () => {
             >
               <IconMenu2 size={22} />
             </button>
-            <div className="relative hidden sm:block w-72 z-50">
-              <SearchBar placeholder="Search POs, Suppliers..." value={globalSearch} onChange={setGlobalSearch} />
-            </div>
           </div>
 
           <div className="flex items-center gap-5">
@@ -409,9 +404,9 @@ const App = () => {
         {/* Dynamic Content */}
         <div className={activeTab === 'sheets' || activeTab === 'polog' || activeTab === 'prlist' ? "flex-1 w-full overflow-hidden" : "flex-1 w-full overflow-y-auto"}>
           {/* Purchase Order Request */}
-          {activeTab === 'po-dashboard' && <ReviewDashboard searchQuery={globalSearch} />}
-          {activeTab === 'polog' && <POLog initialPR={selectedPR} searchQuery={globalSearch} />}
-          {activeTab === 'prlist' && <POLog mode="prlist" searchQuery={globalSearch} />}
+          {activeTab === 'po-dashboard' && <ReviewDashboard />}
+          {activeTab === 'polog' && <POLog initialPR={selectedPR} />}
+          {activeTab === 'prlist' && <POLog mode="prlist" />}
 
           {/* Review Data */}
           {activeTab === 'review-dashboard' && <Overview />}
