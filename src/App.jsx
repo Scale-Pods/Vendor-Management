@@ -12,7 +12,8 @@ import {
   IconLayoutDashboard,
   IconDatabaseImport,
   IconPackage,
-  IconUpload
+  IconUpload,
+  IconClipboardCheck
 } from '@tabler/icons-react';
 import VendorAnalysis from './components/vendors/VendorAnalysis';
 import PRTable from './components/records/PRTable';
@@ -25,6 +26,7 @@ import QuoteRegister from './components/quotes/QuoteRegister';
 import { SearchBar } from './components/ui/search-bar';
 import Login from './components/auth/Login';
 import UserManagement from './components/admin/UserManagement';
+import Overview from './components/dashboard/Overview';
 
 const SIDEBAR_W = 260;
 
@@ -35,6 +37,7 @@ const App = () => {
   });
   const [activeTab, setActiveTab] = useState('polog');
   const [selectedPR, setSelectedPR] = useState(null);
+  const [globalSearch, setGlobalSearch] = useState('');
 
   // Diagnostic logging to track role changes
   useEffect(() => {
@@ -60,7 +63,10 @@ const App = () => {
 
   const handleSelectPR = (pr) => {
     setSelectedPR(pr);
-    setActiveTab('polog');
+    // If we're already on a review tab, don't switch to polog
+    if (!activeTab.startsWith('review')) {
+      setActiveTab('polog');
+    }
   };
 
   const isViewer = user?.role === 'viewer';
@@ -73,14 +79,14 @@ const App = () => {
   // Purchase Order Request group
   const poRequestNav = [
     { id: 'po-dashboard', label: 'Dashboard', icon: IconLayoutDashboard },
-    { id: 'polog', label: 'Data + Upload Data', icon: IconDatabaseImport },
-    { id: 'prlist', label: 'Material Request', icon: IconPackage },
+    { id: 'polog', label: 'PR Uploads', icon: IconDatabaseImport },
+    { id: 'prlist', label: 'PR List', icon: IconPackage },
   ];
 
   // Review Data group
   const reviewDataNav = [
     { 
-      id: 'review-dashboard-group', 
+      id: 'review-dashboard', 
       label: 'Dashboard', 
       icon: IconLayoutDashboard,
       children: [
@@ -96,7 +102,7 @@ const App = () => {
     { id: 'qr-dashboard', label: 'Dashboard', icon: IconLayoutDashboard },
     { id: 'qr-data', label: 'Data', icon: IconClipboardList },
     { id: 'qr-material', label: 'Material', icon: IconPackage },
-    { id: 'qr-upload', label: 'Upload Data', icon: IconUpload },
+    { id: 'qr-upload', label: 'Upload Data', icon: IconUpload, restricted: true },
   ];
 
   const [expandedGroups, setExpandedGroups] = useState({
@@ -122,13 +128,7 @@ const App = () => {
           onClick={() => {
             if (hasChildren) {
               onExpand(!isExpanded);
-              // Also set the first child as active if expanding and no child is active
-              if (!isExpanded && item.children) {
-                const anyChildActive = item.children.some(c => c.id === activeTab);
-                if (!anyChildActive) {
-                  setActiveTab(item.children[0].id);
-                }
-              }
+              setActiveTab(item.id);
             } else {
               setActiveTab(item.id);
             }
@@ -248,9 +248,9 @@ const App = () => {
             title="Review Data" 
             groupKey="reviewData" 
             items={reviewDataNav}
-            expandState={{ 'review-dashboard-group': expandedGroups.reviewDashboard }}
+            expandState={{ 'review-dashboard': expandedGroups.reviewDashboard }}
             onExpandItem={(id) => {
-              if (id === 'review-dashboard-group') toggleGroup('reviewDashboard');
+              if (id === 'review-dashboard') toggleGroup('reviewDashboard');
             }}
           />
 
@@ -342,9 +342,9 @@ const App = () => {
                 title="Review Data" 
                 groupKey="reviewData" 
                 items={reviewDataNav}
-                expandState={{ 'review-dashboard-group': expandedGroups.reviewDashboard }}
+                expandState={{ 'review-dashboard': expandedGroups.reviewDashboard }}
                 onExpandItem={(id, val) => {
-                  if (id === 'review-dashboard-group') toggleGroup('reviewDashboard');
+                  if (id === 'review-dashboard') toggleGroup('reviewDashboard');
                 }}
               />
               <SidebarSection 
@@ -393,7 +393,7 @@ const App = () => {
               <IconMenu2 size={22} />
             </button>
             <div className="relative hidden sm:block w-72 z-50">
-              <SearchBar placeholder="Search POs, Suppliers..." />
+              <SearchBar placeholder="Search POs, Suppliers..." value={globalSearch} onChange={setGlobalSearch} />
             </div>
           </div>
 
@@ -409,13 +409,14 @@ const App = () => {
         {/* Dynamic Content */}
         <div className={activeTab === 'sheets' || activeTab === 'polog' || activeTab === 'prlist' ? "flex-1 w-full overflow-hidden" : "flex-1 w-full overflow-y-auto"}>
           {/* Purchase Order Request */}
-          {activeTab === 'po-dashboard' && <ReviewDashboard />}
-          {activeTab === 'polog' && <POLog initialPR={selectedPR} />}
-          {activeTab === 'prlist' && <POLog mode="prlist" />}
+          {activeTab === 'po-dashboard' && <ReviewDashboard searchQuery={globalSearch} />}
+          {activeTab === 'polog' && <POLog initialPR={selectedPR} searchQuery={globalSearch} />}
+          {activeTab === 'prlist' && <POLog mode="prlist" searchQuery={globalSearch} />}
 
           {/* Review Data */}
-          {activeTab === 'review2025' && <ReviewYear year="2025" action="25" onSelectPR={handleSelectPR} />}
-          {activeTab === 'review2026' && <ReviewYear year="2026" action="26" onSelectPR={handleSelectPR} />}
+          {activeTab === 'review-dashboard' && <Overview />}
+          {activeTab === 'review2025' && <ReviewYear year="2025" action="25" onAuditSelect={handleSelectPR} />}
+          {activeTab === 'review2026' && <ReviewYear year="2026" action="26" onAuditSelect={handleSelectPR} />}
           {activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
           {activeTab === 'sheets' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Sheets.</div>}
 
@@ -423,7 +424,8 @@ const App = () => {
           {activeTab === 'qr-dashboard' && <QuoteRegister subView="dashboard" />}
           {activeTab === 'qr-data' && <QuoteRegister subView="data" />}
           {activeTab === 'qr-material' && <QuoteRegister subView="material" />}
-          {activeTab === 'qr-upload' && <QuoteRegister subView="upload" />}
+          {activeTab === 'qr-upload' && !isViewer && <QuoteRegister subView="upload" />}
+          {activeTab === 'qr-upload' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Upload Data.</div>}
 
           {/* Admin */}
           {activeTab === 'users' && isAdmin && <UserManagement />}
@@ -435,6 +437,34 @@ const App = () => {
           {activeTab === 'insights' && <InsightsPanel />}
         </div>
       </main>
+
+      {/* Global Audit Review Modal - Covers everything including sidebar */}
+      {selectedPR && activeTab.startsWith('review') && (
+        <div className="fixed inset-0 z-1000 flex items-center justify-center p-4 md:p-8">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-500" onClick={() => setSelectedPR(null)}></div>
+          <div className="relative w-full h-full max-w-[1500px] glass-panel shadow-[0_0_120px_rgba(0,0,0,0.9)] border-border flex flex-col overflow-hidden animate-in zoom-in-95 duration-400">
+            <div className="flex items-center justify-between px-8 py-6 border-b border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.3)]">
+              <div>
+                <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <IconCalendar className="text-[#F59E0B]" />
+                  Audit Review — {selectedPR}
+                </h3>
+                <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-black uppercase tracking-widest mt-1">AI-Powered Verification Engine</p>
+              </div>
+              <button 
+                onClick={() => setSelectedPR(null)} 
+                className="p-2 hover:bg-[rgba(255,255,255,0.08)] rounded-full text-muted-foreground transition-all hover:rotate-90 hover:text-white"
+              >
+                <IconX size={28} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-auto custom-scrollbar px-6 sm:px-12 py-10">
+              <Overview darkMode={true} initialPR={selectedPR} isModalMode={true} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

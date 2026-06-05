@@ -315,7 +315,7 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
 };
 
 /* â”€â”€â”€ Main Component â”€â”€â”€ */
-const POLog = ({ mode = 'dashboard' }) => {
+const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   // Paste zone
   const [pasteText, setPasteText] = useState('');
   const [rateDetailsMap, setRateDetailsMap] = useState({}); // { [prRef]: text }
@@ -1535,8 +1535,15 @@ const POLog = ({ mode = 'dashboard' }) => {
       );
     }
 
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter((row) =>
+        Object.values(row).some((v) => String(v || '').toLowerCase().includes(q))
+      );
+    }
+
     return result;
-  }, [logData, logSearch, monthFilter, enteredByFilter, statusFilter]);
+  }, [logData, logSearch, monthFilter, enteredByFilter, statusFilter, searchQuery]);
 
   const dashboardStats = useMemo(() => {
     if (!poMasterData.length) return null;
@@ -2120,22 +2127,11 @@ const POLog = ({ mode = 'dashboard' }) => {
         </div>
         )}
 
+        {!isViewer && (
         <div className="stagger-item" style={{ animationDelay: '0ms' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
             <h2 className="text-lg font-bold text-white tracking-tight">Import PO Data</h2>
-            <span className="text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.15em] ml-2">
-              STEPS TO UPLOAD DATA
-            </span>
-          </div>
-
-          <div className="mb-2">
-            <h3 className="text-[13px] font-black text-white uppercase tracking-wider">Step 1: Paste PO Log</h3>
-            {parsedRows.length > 0 && Object.keys(rateDetailsMap).length === 0 && (
-              <p className="text-[11px] font-bold text-[#10B981] mt-1 animate-pulse">
-                Step 1 complete â€” now paste the rate details below
-              </p>
-            )}
           </div>
 
           <div
@@ -2217,6 +2213,7 @@ const POLog = ({ mode = 'dashboard' }) => {
             </div>
           </div>
         </div>
+        )}
 
         {/* â•â•â•â•â•â•â•â•â•â•â• STEP 2 & PREVIEW TABLE â•â•â•â•â•â•â•â•â•â•â• */}
         {parsedRows.length > 0 && (

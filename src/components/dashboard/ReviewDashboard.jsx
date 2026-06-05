@@ -28,7 +28,7 @@ const Skeleton = ({ className }) => (
 );
 
 const KPIStore = ({ title, value, icon: Icon, color, trend, loading }) => (
-  <div className="glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative flex flex-col justify-between min-h-[140px] hover:border-[rgba(255,255,255,0.15)] transition-all">
+  <div className="glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative flex flex-col justify-between min-h-[160px] h-full hover:border-[rgba(255,255,255,0.15)] transition-all">
     <div className="flex justify-between items-start">
       <div className="p-2.5 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]" style={{ color }}>
         <Icon size={20} stroke={2} />
@@ -52,24 +52,24 @@ const KPIStore = ({ title, value, icon: Icon, color, trend, loading }) => (
 );
 
 const CurrencyKPI = ({ title, value, icon: Icon, color, loading }) => (
-  <div className="glass-panel p-4 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative group hover:border-[rgba(255,255,255,0.15)] transition-all">
+  <div className="glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative group hover:border-[rgba(255,255,255,0.15)] transition-all h-full min-h-[120px] flex flex-col justify-center">
     <div className="flex items-center gap-4">
       <div className="p-3 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}10`, color }}>
         <Icon size={24} stroke={2} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[9px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest mb-0.5 whitespace-nowrap">{title}</p>
+        <p className="text-[9px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest mb-1 whitespace-nowrap">{title}</p>
         {loading ? (
           <Skeleton className="h-7 w-3/4" />
         ) : (
-          <h3 className="text-xl font-black text-white truncate">AED {Number(value || 0).toLocaleString()}</h3>
+          <h3 className="text-xl font-black text-white truncate leading-tight">AED {Number(value || 0).toLocaleString()}</h3>
         )}
       </div>
     </div>
   </div>
 );
 
-const ReviewDashboard = () => {
+const ReviewDashboard = ({ searchQuery = '' }) => {
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ project: '', supplier: '', search: '' });
@@ -146,16 +146,23 @@ const ReviewDashboard = () => {
     return rawData.filter(item => {
       const matchProject = !filters.project || item.Project === filters.project;
       const matchSupplier = !filters.supplier || item.Supplier === filters.supplier;
-      
-      const searchStr = filters.search.toLowerCase();
-      const matchSearch = !filters.search || 
-        (item.PR && String(item.PR).toLowerCase().includes(searchStr)) ||
-        (item.Project && String(item.Project).toLowerCase().includes(searchStr)) ||
-        (item.Supplier && String(item.Supplier).toLowerCase().includes(searchStr));
 
-      return matchProject && matchSupplier && matchSearch;
+      const localSearch = filters.search.toLowerCase();
+      const globalSearch = searchQuery.toLowerCase();
+      const matchesLocal = !filters.search ||
+        (item.PR && String(item.PR).toLowerCase().includes(localSearch)) ||
+        (item.Project && String(item.Project).toLowerCase().includes(localSearch)) ||
+        (item.Supplier && String(item.Supplier).toLowerCase().includes(localSearch)) ||
+        (item['PO No'] && String(item['PO No']).toLowerCase().includes(localSearch));
+      const matchesGlobal = !globalSearch ||
+        (item.PR && String(item.PR).toLowerCase().includes(globalSearch)) ||
+        (item.Project && String(item.Project).toLowerCase().includes(globalSearch)) ||
+        (item.Supplier && String(item.Supplier).toLowerCase().includes(globalSearch)) ||
+        (item['PO No'] && String(item['PO No']).toLowerCase().includes(globalSearch));
+
+      return matchProject && matchSupplier && matchesLocal && matchesGlobal;
     });
-  }, [rawData, filters]);
+  }, [rawData, filters, searchQuery]);
 
   /* ─── Derived Stats ─── */
   const stats = useMemo(() => {

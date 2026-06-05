@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   IconClipboardCheck,
+  IconClipboardList,
   IconAlertCircle,
   IconHistory,
   IconClock,
@@ -560,7 +561,7 @@ const Overview = ({ initialPR, isModalMode }) => {
   }, [isVerificationMode, checkResult]);
 
   return (
-    <div className={isModalMode ? "space-y-8 pb-10" : "space-y-20 pb-20"}>
+    <div className={isModalMode ? "space-y-8 pb-10" : "space-y-20 pb-20 px-4 md:px-8"}>
       {/* PR Verification Engine */}
       {!isModalMode && (
         <div className="w-full flex flex-col items-center stagger-item">
@@ -581,16 +582,21 @@ const Overview = ({ initialPR, isModalMode }) => {
         </div>
       )}
 
-        <div className="flex justify-center -mb-8">
+        <div className="flex justify-center mb-10">
           {isChecking && isModalMode && (
             <div className="flex items-center gap-3 px-6 py-3 bg-[rgba(245,158,11,0.1)] text-[#F59E0B] border border-[rgba(245,158,11,0.2)] rounded-2xl text-[13px] font-black tracking-widest backdrop-blur-xl animate-pulse shadow-xl">
               <IconRefresh className="w-5 h-5 animate-spin" /> INITIALIZING AUDIT ENGINE...
             </div>
           )}
           {checkResult && !isChecking && (
-            <div className="flex items-center gap-2 px-5 py-2.5 bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.2)] rounded-full text-[12px] font-bold backdrop-blur-md shadow-lg">
-              <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-              PR Verified: {checkResult.po} — {checkResult.materials.length} line items found
+            <div className="flex items-center gap-3 px-6 py-2.5 bg-[rgba(16,185,129,0.1)] text-[#10B981] border border-[rgba(16,185,129,0.2)] rounded-full text-[13px] font-bold backdrop-blur-xl shadow-[0_0_30px_rgba(16,185,129,0.15)] animate-in fade-in zoom-in-95 duration-500">
+              <div className="relative flex">
+                <div className="w-2.5 h-2.5 rounded-full bg-semantic-increase" />
+                <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-semantic-increase animate-ping" />
+              </div>
+              <span className="tracking-wide">PR Verified: <span className="text-white font-black ml-1">{checkResult.po}</span></span>
+              <span className="w-1 h-1 rounded-full bg-[rgba(16,185,129,0.3)] mx-1" />
+              <span className="text-[rgba(255,255,255,0.7)]">{checkResult.materials.length} line items found</span>
             </div>
           )}
           {error && !isChecking && (
@@ -602,26 +608,62 @@ const Overview = ({ initialPR, isModalMode }) => {
 
         {/* PR Financial Insights - MOVED HIGHER FOR MODAL */}
         {checkResult && !isChecking && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
-            <StatCard index={1} title="Total Items" value={checkResult.materials.length} subValue="Line items in this PR" glowColor="#6366F1" icon={IconClipboardCheck} />
-            <StatCard index={2} title="PR Value" value={`AED ${formatCurrency(checkResult.materials.reduce((acc, m) => acc + (parseFloat(m.Total) || 0), 0))}`} subValue="Gross total including VAT" glowColor="#10B981" icon={DollarSign} />
-            <StatCard index={3} title="Suppliers" value={new Set(checkResult.materials.map(m => m.Supplier)).size} subValue="Vendors associated" glowColor="#F59E0B" icon={Users} />
-            
-            {checkResult.globalHistory && checkResult.globalHistory.length > 0 ? (
-              <div className="glass-panel p-5 border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.03)] relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
-                <div className="absolute top-0 right-0 w-24 h-24 opacity-[0.05] rounded-full -mr-8 -mt-8 blur-2xl transition-all duration-500 group-hover:opacity-[0.15] bg-[#F59E0B]"></div>
-                <h3 className="text-[rgba(255,255,255,0.4)] text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <IconAlertCircle size={14} className="text-[#F59E0B]" /> Latest Remark
-                </h3>
-                <p className="text-[12px] text-white font-medium italic line-clamp-3 leading-relaxed">
-                  "{checkResult.globalHistory[0].remark || checkResult.globalHistory[0].Remark || 'No remark'}"
-                </p>
-              </div>
-            ) : (
-                <div className="glass-panel p-5 border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] flex flex-col justify-center items-center opacity-40">
-                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 text-center">No Audit History</p>
+          <div className="flex flex-wrap -mx-3 mb-8 animate-in fade-in slide-in-from-top-4 duration-500 relative z-20">
+            <div className="w-full sm:w-1/2 lg:w-1/4 px-3 mb-6 lg:mb-0">
+              <StatCard 
+                index={1} 
+                title="Total Items" 
+                value={checkResult.materials.length} 
+                subValue="Line items in this PR" 
+                glowColor="#c8922a" 
+                icon={IconClipboardList} 
+              />
+            </div>
+            <div className="w-full sm:w-1/2 lg:w-1/4 px-3 mb-6 lg:mb-0">
+              <StatCard 
+                index={2} 
+                title="PR Value" 
+                value={`AED ${formatCurrency(checkResult.materials.reduce((acc, m) => acc + (parseFloat(String(m.Total || 0).replace(/,/g, '')) || 0), 0))}`} 
+                subValue="Gross total including VAT" 
+                glowColor="#10B981" 
+                icon={IconTrendingUp} 
+              />
+            </div>
+            <div className="w-full sm:w-1/2 lg:w-1/4 px-3 mb-6 sm:mb-0">
+              <StatCard 
+                index={3} 
+                title="Suppliers" 
+                value={new Set(checkResult.materials.map(m => m.Supplier)).size} 
+                subValue="Vendors associated" 
+                glowColor="#3b82f6" 
+                icon={IconUsers} 
+              />
+            </div>
+            <div className="w-full sm:w-1/2 lg:w-1/4 px-3">
+              {checkResult.globalHistory && checkResult.globalHistory.length > 0 ? (
+                <div className="relative glass-panel p-6 overflow-hidden group hover:-translate-y-1 transition-all duration-300 stagger-item flex flex-col justify-between min-h-[160px] border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] h-full" style={{ animationDelay: '320ms' }}>
+                  <div 
+                    className="absolute -inset-4 opacity-15 blur-2xl pointer-events-none group-hover:opacity-25 transition-opacity duration-300"
+                    style={{ background: `radial-gradient(circle at center, #F59E0B, transparent 70%)`, zIndex: -1 }}
+                  />
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-10 h-10 rounded-full bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.1)] flex items-center justify-center text-[#F59E0B]">
+                      <IconAlertCircle size={20} />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-[rgba(255,255,255,0.4)] text-[11px] font-bold uppercase tracking-wider mb-2">Latest Remark</h3>
+                    <p className="text-[12px] text-white font-medium italic line-clamp-2 leading-relaxed">
+                      "{checkResult.globalHistory[0].remark || checkResult.globalHistory[0].Remark || 'No remark'}"
+                    </p>
+                  </div>
                 </div>
-            )}
+              ) : (
+                <div className="relative glass-panel p-6 overflow-hidden flex flex-col justify-center items-center opacity-40 min-h-[160px] border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] h-full">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 text-center">No Audit History</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
