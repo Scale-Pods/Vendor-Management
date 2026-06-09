@@ -49,6 +49,18 @@ const App = () => {
   const [selectedPR, setSelectedPR] = useState(null);
   const queryClient = useQueryClient();
 
+  const flatItems = (json) => {
+    let raw = [];
+    if (Array.isArray(json)) {
+      if (json[0]?.data && Array.isArray(json[0].data)) raw = json[0].data;
+      else if (json[0] && Array.isArray(json[0])) raw = json[0];
+      else raw = json;
+    } else if (json?.data) {
+      raw = Array.isArray(json.data) ? json.data : [];
+    }
+    return raw.filter(item => item && typeof item === 'object' && !Array.isArray(item));
+  };
+
   // Diagnostic logging to track role changes
   useEffect(() => {
     if (user) {
@@ -72,29 +84,15 @@ const App = () => {
     return () => clearInterval(interval);
   }, [user]);
 
-  // Prefetch dashboard data on login so charts render instantly
-  useEffect(() => {
-    if (!user) return;
-    const baseUrl = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978';
-    const flatItems = (json) => {
-      let raw = [];
-      if (Array.isArray(json)) {
-        if (json[0]?.data && Array.isArray(json[0].data)) raw = json[0].data;
-        else if (json[0] && Array.isArray(json[0])) raw = json[0];
-        else raw = json;
-      } else if (json?.data) {
-        raw = Array.isArray(json.data) ? json.data : [];
-      }
-      return raw.filter(item => item && typeof item === 'object' && !Array.isArray(item));
-    };
-    queryClient.prefetchQuery({ queryKey: ['po-data-intel'], queryFn: async () => { const r = await fetch(`${baseUrl}?action=PO%20Data`); if (!r.ok) throw new Error('Failed'); const j = await r.json(); return flatItems(j); }, staleTime: 5 * 60 * 1000 });
-  }, [user, queryClient]);
-
   const handleLogin = (userData) => {
     console.log('Login event triggered with data:', userData);
     setUser(userData);
     localStorage.setItem('scale_pods_user', JSON.stringify(userData));
     localStorage.setItem('scale_pods_session_time', String(Date.now()));
+
+    // Start prefetch immediately so data is in cache before component mounts
+    const baseUrl = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978';
+    queryClient.prefetchQuery({ queryKey: ['po-data-intel'], queryFn: async () => { const r = await fetch(`${baseUrl}?action=PO%20Data`); if (!r.ok) throw new Error('Failed'); const j = await r.json(); return flatItems(j); }, staleTime: 5 * 60 * 1000 });
   };
 
   const handleLogout = () => {

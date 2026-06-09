@@ -20,9 +20,7 @@ const TEXT = 'rgba(255,255,255,0.4)';
 
 const COLORS = [GOLD, BLUE, GREEN, PURPLE, AMBER, '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#8b5cf6'];
 
-const Skeleton = ({ className }) => (
-  <div className={`animate-pulse bg-white/5 rounded-md ${className}`} />
-);
+
 
 const AnimatedCounter = ({ value, prefix = '', suffix = '', decimals = 0 }) => {
   const [display, setDisplay] = useState(0);
@@ -62,17 +60,17 @@ const KPIBox = ({ title, value, icon: Icon, color, trend, format, subtext, loadi
       )}
     </div>
     <div className="mt-4">
-      {loading ? (
-        <Skeleton className="h-8 w-24 mb-2" />
-      ) : (
-        <h3 className="text-2xl font-black text-white tracking-tight">
-          {format === 'currency' ? (
+      <h3 className="text-2xl font-black text-white tracking-tight">
+        {loading ? (
+          <span className="text-[rgba(255,255,255,0.1)]">—</span>
+        ) : (
+          format === 'currency' ? (
             <>AED <AnimatedCounter value={value} decimals={0} /></>
           ) : (
             <AnimatedCounter value={value} />
-          )}
-        </h3>
-      )}
+          )
+        )}
+      </h3>
       <p className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest mt-1">{title}</p>
       {subtext && !loading && <p className="text-[9px] text-[rgba(255,255,255,0.15)] mt-1">{subtext}</p>}
     </div>
@@ -420,23 +418,19 @@ const ProcurementIntelligence = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="Top 10 Projects by Spend" subtitle="Project Name &bull; Total Procurement Value &bull; % of Overall Spend">
           <div className="h-[350px]">
-            {loading ? (
-              <Skeleton className="w-full h-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics?.topProjects || []} layout="vertical" margin={{ left: 20, right: 60, top: 10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" horizontal={false} />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" stroke={TEXT} fontSize={10} width={140} axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.8)', fontWeight: 600 }} />
-                  <RechartsTooltip contentStyle={tooltipStyle} formatter={(v) => [`AED ${v.toLocaleString()}`, 'Total Value']} />
-                  <Bar dataKey="spend" radius={[0, 6, 6, 0]} barSize={22} label={{ position: 'right', fill: '#fff', fontSize: 10, fontWeight: 700, formatter: (v) => `AED ${v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : v >= 1000 ? (v/1000).toFixed(1) + 'K' : v}` }}>
-                    {analytics?.topProjects?.map((_, idx) => (
-                      <Cell key={idx} fill={GOLD} fillOpacity={1 - (idx * 0.07)} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={analytics?.topProjects || []} layout="vertical" margin={{ left: 20, right: 60, top: 10, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" horizontal={false} />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" stroke={TEXT} fontSize={10} width={140} axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.8)', fontWeight: 600 }} />
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v) => [`AED ${v.toLocaleString()}`, 'Total Value']} />
+                <Bar dataKey="spend" radius={[0, 6, 6, 0]} barSize={22} label={{ position: 'right', fill: '#fff', fontSize: 10, fontWeight: 700, formatter: (v) => `AED ${v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : v >= 1000 ? (v/1000).toFixed(1) + 'K' : v}` }}>
+                  {analytics?.topProjects?.map((_, idx) => (
+                    <Cell key={idx} fill={GOLD} fillOpacity={1 - (idx * 0.07)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
           {analytics?.topProjects && (
             <div className="mt-4 space-y-1">
@@ -452,28 +446,24 @@ const ProcurementIntelligence = () => {
 
         <ChartCard title="Supplier Distribution" subtitle="Top suppliers &bull; Spend allocation &bull; Supplier contribution %">
           <div className="h-[300px]">
-            {loading ? (
-              <Skeleton className="w-full h-full rounded-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={analytics?.topSuppliers?.slice(0, 6) || []}
-                    dataKey="spend"
-                    nameKey="name"
-                    innerRadius="60%"
-                    outerRadius="80%"
-                    paddingAngle={3}
-                    stroke="none"
-                  >
-                    {analytics?.topSuppliers?.slice(0, 6).map((_, idx) => (
-                      <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip contentStyle={tooltipStyle} formatter={(v, name) => [`AED ${v.toLocaleString()}`, name]} />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={analytics?.topSuppliers?.slice(0, 6) || []}
+                  dataKey="spend"
+                  nameKey="name"
+                  innerRadius="60%"
+                  outerRadius="80%"
+                  paddingAngle={3}
+                  stroke="none"
+                >
+                  {analytics?.topSuppliers?.slice(0, 6).map((_, idx) => (
+                    <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v, name) => [`AED ${v.toLocaleString()}`, name]} />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
           {analytics?.topSuppliers && (
             <div className="mt-4 space-y-1">
@@ -499,10 +489,7 @@ const ProcurementIntelligence = () => {
 
       {/* ─── Section 6: Top Suppliers Leaderboard ─── */}
       <ChartCard title="Top Suppliers Leaderboard" subtitle="Supplier &bull; Total Spend &bull; Orders &bull; Projects &bull; Share %">
-        {loading ? (
-          <Skeleton className="h-48 w-full" />
-        ) : (
-          <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-[rgba(255,255,255,0.06)]">
@@ -535,43 +522,36 @@ const ProcurementIntelligence = () => {
               </tbody>
             </table>
           </div>
-        )}
-      </ChartCard>
+        </ChartCard>
 
       {/* ─── Section 7: Recent Procurement Activity ─── */}
       <ChartCard title="Recent Procurement Activity" subtitle="Live activity feed &bull; Latest purchase records">
-        {loading ? (
-          <div className="space-y-3">
-            {[...Array(5)].map((_, idx) => <Skeleton key={idx} className="h-10 w-full" />)}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-[rgba(255,255,255,0.06)]">
-                  <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">PR Number</th>
-                  <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Project</th>
-                  <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Supplier</th>
-                  <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Material</th>
-                  <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Qty</th>
-                  <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Value</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[rgba(255,255,255,0.06)]">
+                <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">PR Number</th>
+                <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Project</th>
+                <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Supplier</th>
+                <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Material</th>
+                <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Qty</th>
+                <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Value</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
+              {(analytics?.recentActivity || []).slice(0, 10).map((act, idx) => (
+                <tr key={idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors">
+                  <td className="py-3 text-[12px] text-white font-bold">{act.pr}</td>
+                  <td className="py-3 text-[12px] text-white/60">{act.project}</td>
+                  <td className="py-3 text-[12px] text-white/60">{act.supplier}</td>
+                  <td className="py-3 text-[12px] text-white/50 max-w-[200px] truncate">{act.material}</td>
+                  <td className="py-3 text-[12px] text-right tabular-nums text-white/60">{act.qty.toLocaleString()}</td>
+                  <td className="py-3 text-[12px] text-right tabular-nums font-bold text-[#c8922a]">AED {act.value.toLocaleString()}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
-                {(analytics?.recentActivity || []).slice(0, 10).map((act, idx) => (
-                  <tr key={idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors">
-                    <td className="py-3 text-[12px] text-white font-bold">{act.pr}</td>
-                    <td className="py-3 text-[12px] text-white/60">{act.project}</td>
-                    <td className="py-3 text-[12px] text-white/60">{act.supplier}</td>
-                    <td className="py-3 text-[12px] text-white/50 max-w-[200px] truncate">{act.material}</td>
-                    <td className="py-3 text-[12px] text-right tabular-nums text-white/60">{act.qty.toLocaleString()}</td>
-                    <td className="py-3 text-[12px] text-right tabular-nums font-bold text-[#c8922a]">AED {act.value.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </ChartCard>
     </div>
   );
