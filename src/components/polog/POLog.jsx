@@ -1509,6 +1509,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
     result = Object.values(prMap).map(merged => {
        const formatVal = (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+       merged._Ref = merged.Ref; // preserve original PO Ref before overwrite
        merged.Ref = merged['Req Ref'] || merged.Req_Ref || 'Ungrouped'; // Card Title is the PR
        merged['Net Price'] = formatVal(merged._netSum);
        merged.VAT = formatVal(merged._vatSum);

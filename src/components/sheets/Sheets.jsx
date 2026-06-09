@@ -225,6 +225,25 @@ const Sheets = () => {
     return overrideKey in localOverrides ? localOverrides[overrideKey] : row[col];
   }, [localOverrides]);
 
+  const handleStatusChange = useCallback((rIdx, newValue) => {
+    const overrideKey = `${rIdx}:Status`;
+    const row = displayData[rIdx];
+    if (!row) return;
+    const currentVal = localOverrides[overrideKey] ?? row.Status;
+    if (newValue === currentVal) return;
+    setLocalOverrides(prev => ({ ...prev, [overrideKey]: newValue }));
+    const supabaseId = row.id ?? row.ID ?? null;
+    fetch(UPDATE_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: activeTab,
+        row_id: supabaseId,
+        data: { Status: newValue },
+      }),
+    }).catch(err => console.error('Failed to save status update:', err));
+  }, [displayData, localOverrides, activeTab]);
+
   const handleTabSwitch = useCallback((tab) => {
     setActiveTab(tab);
     setSearchTerm('');
@@ -499,6 +518,8 @@ const Sheets = () => {
                           selectedCell={selectedCell}
                           onCellClick={handleCellClick}
                           onCellDoubleClick={handleCellDoubleClick}
+                          activeTab={activeTab}
+                          onStatusChange={handleStatusChange}
                         />
                       </div>
                     );
