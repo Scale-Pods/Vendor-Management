@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -70,60 +71,51 @@ const CurrencyKPI = ({ title, value, icon: Icon, color, loading }) => (
 );
 
 const ReviewDashboard = ({ searchQuery = '' }) => {
-  const [rawData, setRawData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ project: '', supplier: '', search: '' });
 
   /* ─── Data Fetching ─── */
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // 1. Try Supabase first
-        const { data: sbData, error: sbError } = await supabase
-          .from('purchase_orders')
-          .select('*');
-        
-        if (!sbError && sbData && sbData.length > 0) {
-          setRawData(sbData);
-          return;
-        }
-
-        // 2. Fallback to n8n if Supabase is empty/not configured
-        console.log('Supabase empty or missing, falling back to n8n...');
-        const n8nUrl = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO Data`;
-        const response = await fetch(n8nUrl);
-        const json = await response.json();
-        
-        // Extract data array from n8n response
-        const n8nData = Array.isArray(json) ? (json[0]?.data || json) : (json.data || []);
-        
-        // Map n8n fields to internal dashboard fields
-        const mappedData = n8nData.map(item => ({
-          ...item,
-          PR: item['Req Ref'] || item.Ref || 'N/A',
-          Description: item.Description || item.Ref || 'No Description',
-          Project: item.Project || 'Unknown',
-          Supplier: item.Supplier || 'Unknown',
-          change1_total: parseFloat(String(item['Original Pirce'] || item['Net Price'] || 0).replace(/,/g, '')),
-          change2_total: item.change_in_price_1 || null,
-          change3_total: item.change_in_price_2 || null,
-          change4_total: item.change_in_price_3 || null,
-          change5_total: item.change_in_price_4 || null,
-          change6_total: item.change_in_price_5 || null,
-          // Support standard changeN_total format if redirected from supabase
-          ...item 
-        }));
-
-        setRawData(mappedData);
-      } catch (err) {
-        console.error('Failed to load dashboard data', err);
-      } finally {
-        setLoading(false);
+  const { data: rawData = [], isLoading: loading, error } = useQuery({
+    queryKey: ['review-dashboard-data'],
+    queryFn: async () => {
+      // 1. Try Supabase first
+      const { data: sbData, error: sbError } = await supabase
+        .from('purchase_orders')
+        .select('*');
+      
+      if (!sbError && sbData && sbData.length > 0) {
+        return sbData;
       }
-    };
-    fetchData();
-  }, []);
+
+      // 2. Fallback to n8n if Supabase is empty/not configured
+      console.log('Supabase empty or missing, falling back to n8n...');
+      const n8nUrl = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO Data`;
+      const response = await fetch(n8nUrl);
+      const json = await response.json();
+      
+      // Extract data array from n8n response
+      const n8nData = Array.isArray(json) ? (json[0]?.data || json) : (json.data || []);
+      
+      // Map n8n fields to internal dashboard fields
+      return n8nData.map(item => ({
+        ...item,
+        PR: item['Req Ref'] || item.Ref || 'N/A',
+        Description: item.Description || item.Ref || 'No Description',
+        Project: item.Project || 'Unknown',
+        Supplier: item.Supplier || 'Unknown',
+        change1_total: parseFloat(String(item['Original Pirce'] || item['Net Price'] || 0).replace(/,/g, '')),
+        change2_total: item.change_in_price_1 || null,
+        change3_total: item.change_in_price_2 || null,
+        change4_total: item.change_in_price_3 || null,
+        change5_total: item.change_in_price_4 || null,
+        change6_total: item.change_in_price_5 || null,
+        // Support standard changeN_total format if redirected from supabase
+        ...item 
+      }));
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
+  });
 
   /* ─── Helper: Get Latest Total ─── */
   const getLatestTotal = (item) => {

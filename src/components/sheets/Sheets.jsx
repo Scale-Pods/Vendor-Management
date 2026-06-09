@@ -1,15 +1,23 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
-  IconX, IconClock, IconLayoutColumns, IconList, IconTableExport, IconHash, IconDownload
+  IconX, IconClock, IconLayoutColumns, IconList, IconTableExport, IconHash, IconDownload, IconSearch
 } from '@tabler/icons-react';
 import BoxLoader from '../ui/BoxLoader';
+import SheetRow from './SheetRow';
 import { downloadXLSX } from '../../utils/exportXLSX';
+import { useSheetData } from '../../hooks/useSheetData';
 
-/* ─── Table-specific column schemas ─── */
+const ROW_HEIGHT = 44;
+const HEADER_HEIGHT = 44;
+const ROW_NUM_WIDTH = 56;
+const DEFAULT_COL_WIDTH = 180;
+const UPDATE_WEBHOOK = '/api/n8n/webhook/03b33be3-19ea-494b-9ba2-36af60ccb752';
+
 const TABLE_SCHEMAS = {
   'PO Data': ['sr_no', 'Ref', 'po_date', 'Approve / Reject', 'Status', 'Project', 'Company', 'Pending Approval', 'Supplier', 'PO Class', 'Entered By', 'Entered Time', 'Req Ref', 'qc_ref', 'Doc. Remarks', 'Terms & Conditions', 'Attachments', 'Approval History', 'Approval Config', 'Discount', 'Net Price', 'VAT', 'Total Price', 'Status_1', 'Original Pirce', 'Charges', 'Month', 'change_in_price_1', 'change_in_price_1_date', 'change_in_price_2', 'change_in_price_2_date', 'change_in_price_3', 'change_in_price_3_date', 'change_in_price_4', 'change_in_price_4_date', 'change_in_price_5', 'change_in_price_5_date', 'created_at'],
   'material_detail_25': ['Project', 'PR', 'Description', 'Qty', 'Req Qty', 'Reamin Qty', 'Next Doc', 'change1_description', 'change1_qty', 'change1_rate', 'change1_price', 'change1_vat', 'change1_total', 'change1_supplier', 'change2_description', 'change2_qty', 'change2_rate', 'change2_price', 'change2_vat', 'change2_total', 'change2_supplier', 'change3_description', 'change3_qty', 'change3_rate', 'change3_price', 'change3_vat', 'change3_total', 'change3_supplier', 'change4_description', 'change4_qty', 'change4_rate', 'change4_price', 'change4_vat', 'change4_total', 'change4_supplier', 'change5_description', 'change5_qty', 'change5_rate', 'change5_price', 'change5_vat', 'change5_total', 'change5_supplier'],
-  'material_detail_26': ['sr_no', 'Project', 'PR', 'Description', 'Qty', 'Req Qty', 'Reamin Qty', 'Next Doc', 'change1_description', 'change1_qty', 'change1_rate', 'change1_price', 'change1_vat', 'change1_total', 'change1_supplier', 'change2_description', 'change2_qty', 'change2_rate', 'change2_price', 'change2_vat', 'change2_total', 'change2_supplier', 'change1_date', 'change2_date'],
+  'material_detail_26': ['project', 'pr', 'description', 'qty', 'req_qty', 'remain_qty', 'next_doc', 'change1_description', 'change1_qty', 'change1_rate', 'change1_price', 'change1_vat', 'change1_total', 'change1_supplier', 'change2_description', 'change2_qty', 'change2_rate', 'change2_price', 'change2_vat', 'change2_total', 'change2_supplier', 'change3_description', 'change3_qty', 'change3_rate', 'change3_price', 'change3_vat', 'change3_total', 'change3_supplier', 'change4_description', 'change4_qty', 'change4_rate', 'change4_price', 'change4_vat', 'change4_total', 'change4_supplier', 'change5_description', 'change5_qty', 'change5_rate', 'change5_price', 'change5_vat', 'change5_total', 'change5_supplier'],
   'pr_data_25': ['Sr.No', 'Project', 'PR', 'Previous Charges', 'Current Charges', 'Remark'],
   'pr_data_26': ['sr_no', 'project', 'pr', 'previous_charges', 'current_charges', 'remark', 'status', 'initial_pr', 'initial_pr_percentage_amount', 'second_time_pr', 'second_time_pr_percentage_amount'],
   'purchase_orders': ['PR', 'Sr_No', 'Project', 'Description', 'UOM', 'Req_Qty', 'Remain_Qty', 'Next_Doc', 'change1_description', 'change1_qty', 'change1_rate', 'change1_price', 'change1_vat', 'change1_total', 'change1_supplier', 'change2_description', 'change2_qty', 'change2_rate', 'change2_price', 'change2_vat', 'change2_total', 'change2_supplier', 'change3_description', 'change3_qty', 'change3_rate', 'change3_price', 'change3_vat', 'change3_total', 'change3_supplier', 'change4_description', 'change4_qty', 'change4_rate', 'change4_price', 'change4_vat', 'change4_total', 'change4_supplier', 'change5_description', 'change5_qty', 'change5_rate', 'change5_price', 'change5_vat', 'change5_total', 'change5_supplier', 'change1_date', 'change2_date', 'change3_date', 'change4_date', 'change5_date'],
@@ -18,44 +26,33 @@ const TABLE_SCHEMAS = {
 
 const TABS = ['PO Data', 'material_detail_25', 'material_detail_26', 'pr_data_25', 'pr_data_26', 'purchase_orders', 'merged'];
 
-/* ─── Main Sheets Component ─── */
+function useDebounce(value, delay = 300) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 const Sheets = () => {
   const [activeTab, setActiveTab] = useState('pr_data_26');
-  const [rawData, setRawData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [colWidths, setColWidths] = useState({});
   const [selectedCell, setSelectedCell] = useState(null);
   const [popover, setPopover] = useState(null);
   const [sortOrder, setSortOrder] = useState('asc');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  /* ─── Data Fetching ─── */
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setRawData([]);
-      try {
-        const url = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=${encodeURIComponent(activeTab)}`;
-        const response = await fetch(url);
-        const json = await response.json();
+  const [editingCell, setEditingCell] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [localOverrides, setLocalOverrides] = useState({});
 
-        let data = [];
-        if (Array.isArray(json)) {
-          data = json[0]?.data && Array.isArray(json[0].data) ? json[0].data : json;
-        } else if (json?.data && Array.isArray(json.data)) {
-          data = json.data;
-        }
+  const scrollRef = useRef(null);
+  const editInputRef = useRef(null);
+  const debouncedSearch = useDebounce(searchTerm, 300);
 
-        setRawData(data || []);
-      } catch (err) {
-        console.error('Error fetching sheet data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [activeTab]);
+  const { data: rawData = [], isLoading, isFetching } = useSheetData(activeTab);
 
-  /* ─── Columns: Use schema, fallback to auto-detect ─── */
   const activeCols = useMemo(() => {
     const schema = TABLE_SCHEMAS[activeTab];
     if (schema) return schema;
@@ -72,8 +69,8 @@ const Sheets = () => {
     return [];
   }, [activeTab, rawData]);
 
-  /* ─── Sorted Data ─── */
   const sortedData = useMemo(() => {
+    if (!rawData.length) return [];
     const data = [...rawData];
     return data.sort((a, b) => {
       const getVal = (obj) => {
@@ -96,11 +93,35 @@ const Sheets = () => {
     });
   }, [rawData, sortOrder]);
 
-  /* ─── Column Resize ─── */
+  const displayData = useMemo(() => {
+    if (!debouncedSearch || !sortedData.length) return sortedData;
+    const lower = debouncedSearch.toLowerCase();
+    return sortedData.filter(row =>
+      activeCols.some(col => {
+        const v = row[col];
+        return v != null && String(v).toLowerCase().includes(lower);
+      })
+    );
+  }, [sortedData, debouncedSearch, activeCols]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: displayData.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const totalHeight = rowVirtualizer.getTotalSize();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0]?.start || 0 : 0;
+  const paddingBottom = virtualRows.length > 0
+    ? totalHeight - (virtualRows[virtualRows.length - 1]?.end || 0)
+    : 0;
+
   const startResize = useCallback((colName, e) => {
     e.preventDefault();
     const startX = e.pageX;
-    const startWidth = colWidths[colName] || 180;
+    const startWidth = colWidths[colName] || DEFAULT_COL_WIDTH;
 
     const onMove = (moveE) => {
       const newWidth = Math.max(120, startWidth + (moveE.pageX - startX));
@@ -116,8 +137,9 @@ const Sheets = () => {
     document.body.style.cursor = 'col-resize';
   }, [colWidths]);
 
-  /* ─── Cell click → popover ─── */
-  const handleCellClick = (val, colName, rIdx, e) => {
+  const handleCellClick = useCallback((val, colName, rIdx, e) => {
+    if (editingCell) return;
+    setSelectedCell({ rIdx, colName });
     const str = String(val ?? '');
     if (str.length < 25) {
       setPopover(null);
@@ -130,17 +152,64 @@ const Sheets = () => {
       x: Math.min(rect.left, window.innerWidth - 370),
       y: Math.min(rect.bottom + 4, window.innerHeight - 220),
     });
-    setSelectedCell({ rIdx, colName });
-  };
+  }, [editingCell]);
 
-  /* ─── Render cell text ─── */
-  const cellText = (val) => {
-    if (val === null || val === undefined) return '—';
-    const s = String(val);
-    return s;
-  };
+  const handleCellDoubleClick = useCallback((val, colName, rIdx, e) => {
+    if (editingCell) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setEditingCell({ rIdx, colName, x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+    setEditValue(String(val ?? ''));
+    setPopover(null);
+  }, [editingCell]);
 
-  /* ─── Backdrop click closes popover ─── */
+  const handleEditSave = useCallback(() => {
+    if (!editingCell) return;
+    const { rIdx, colName } = editingCell;
+    const row = displayData[rIdx];
+    if (!row) {
+      setEditingCell(null);
+      setEditValue('');
+      return;
+    }
+
+    const overrideKey = `${rIdx}:${colName}`;
+    const currentVal = localOverrides[overrideKey] ?? String(row[colName] ?? '');
+    if (editValue === currentVal) {
+      setEditingCell(null);
+      setEditValue('');
+      return;
+    }
+
+    setLocalOverrides(prev => ({ ...prev, [overrideKey]: editValue }));
+
+    const supabaseId = row.id ?? row.ID ?? null;
+
+    fetch(UPDATE_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: activeTab,
+        row_id: supabaseId,
+        data: { [colName]: editValue },
+      }),
+    }).catch(err => console.error('Failed to save cell update:', err));
+
+    setEditingCell(null);
+    setEditValue('');
+  }, [editingCell, editValue, displayData, localOverrides, activeTab]);
+
+  const handleEditCancel = useCallback(() => {
+    setEditingCell(null);
+    setEditValue('');
+  }, []);
+
+  useEffect(() => {
+    if (editingCell && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingCell]);
+
   useEffect(() => {
     const handler = (e) => {
       if (popover && !e.target.closest('.cell-popover')) {
@@ -151,15 +220,53 @@ const Sheets = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, [popover]);
 
+  const getEffectiveValue = useCallback((row, rIdx, col) => {
+    const overrideKey = `${rIdx}:${col}`;
+    return overrideKey in localOverrides ? localOverrides[overrideKey] : row[col];
+  }, [localOverrides]);
+
+  const handleTabSwitch = useCallback((tab) => {
+    setActiveTab(tab);
+    setSearchTerm('');
+    setSelectedCell(null);
+    setPopover(null);
+    setEditingCell(null);
+    setEditValue('');
+    setLocalOverrides({});
+  }, []);
+
+  const renderSkeleton = () => (
+    <div className="h-full w-full" style={{ overflow: 'hidden' }}>
+      <div style={{ display: 'flex', height: HEADER_HEIGHT, background: '#0F1520', borderBottom: '2px solid rgba(200,146,42,0.3)' }}>
+        <div style={{ width: 56, flexShrink: 0 }} />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} style={{ width: DEFAULT_COL_WIDTH, flexShrink: 0, padding: '0 16px', display: 'flex', alignItems: 'center' }}>
+            <div style={{ height: 10, width: '60%', background: 'rgba(255,255,255,0.06)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          </div>
+        ))}
+      </div>
+      {Array.from({ length: 12 }).map((_, r) => (
+        <div key={r} style={{ display: 'flex', height: ROW_HEIGHT, background: r % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <div style={{ width: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ height: 8, width: 20, background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          </div>
+          {Array.from({ length: 8 }).map((_, c) => (
+            <div key={c} style={{ width: DEFAULT_COL_WIDTH, flexShrink: 0, padding: '0 16px', display: 'flex', alignItems: 'center' }}>
+              <div style={{ height: 10, width: `${40 + Math.random() * 40}%`, background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: '#06090F' }}>
 
-      {/* ─── Top Bar ─── */}
       <div className="flex items-center justify-between px-5 py-3 border-b shrink-0"
         style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(13,17,23,0.85)' }}>
 
         <div className="flex items-center gap-5">
-          {/* Meta Info */}
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg" style={{ background: 'rgba(200,146,42,0.12)' }}>
               <IconTableExport size={16} style={{ color: '#c8922a' }} />
@@ -174,20 +281,26 @@ const Sheets = () => {
                 <span className="flex items-center gap-1 font-bold">
                   <IconLayoutColumns size={10} /> {activeCols.length} columns
                 </span>
+                {displayData.length < rawData.length && (
+                  <>
+                    <span style={{ opacity: 0.3 }}>·</span>
+                    <span className="flex items-center gap-1 font-bold" style={{ color: '#c8922a' }}>
+                      <IconSearch size={10} /> {displayData.length} filtered
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Divider */}
           <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.08)' }} />
 
-          {/* Tabs */}
           <div className="flex items-center gap-1 p-1 rounded-xl"
             style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
             {TABS.map(tab => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabSwitch(tab)}
                 className="px-3 py-1.5 rounded-lg transition-all"
                 style={{
                   fontSize: '10px',
@@ -206,7 +319,34 @@ const Sheets = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Download XLSX */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}>
+            <IconSearch size={12} style={{ color: 'rgba(255,255,255,0.3)' }} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search across all columns..."
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: 'rgba(255,255,255,0.8)',
+                fontSize: '11px',
+                fontWeight: 600,
+                width: 160,
+              }}
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} style={{ padding: 2, color: 'rgba(255,255,255,0.3)' }}>
+                <IconX size={12} />
+              </button>
+            )}
+          </div>
+
           <button
             onClick={() => downloadXLSX(rawData, `${activeTab.replace(/_/g, '_')}.xlsx`)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
@@ -225,7 +365,6 @@ const Sheets = () => {
             DOWNLOAD EXCEL
           </button>
 
-          {/* Sort Toggle */}
           <button
             onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
@@ -245,206 +384,210 @@ const Sheets = () => {
         </div>
       </div>
 
-      {/* ─── Table Area ─── */}
       <div className="flex-1 overflow-hidden relative">
-        {loading ? (
-          /* ─── BoxLoader while data loads ─── */
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-6">
             <BoxLoader />
             <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em' }}>
               Loading {activeTab.replace(/_/g, ' ')}…
             </div>
           </div>
-        ) : rawData.length === 0 ? (
+        ) : displayData.length === 0 && !isFetching ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
-            <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, fontWeight: 700 }}>No records found for this table.</p>
+            <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, fontWeight: 700 }}>
+              {debouncedSearch ? 'No records match your search.' : 'No records found for this table.'}
+            </p>
           </div>
         ) : (
-          /* ─── Actual Table ─── */
-          <div className="h-full w-full overflow-auto" style={{ scrollBehavior: 'smooth' }}>
-            <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'fixed' }}>
-
-              {/* ─── Header ─── */}
-              <thead>
-                <tr style={{ height: 44, position: 'sticky', top: 0, zIndex: 60 }}>
-                  {/* Row Number Header */}
-                  <th style={{
-                    position: 'sticky', left: 0, zIndex: 70,
-                    width: 56, minWidth: 56,
-                    background: '#0F1520',
-                    borderRight: '1px solid rgba(255,255,255,0.1)',
-                    borderBottom: '2px solid rgba(200,146,42,0.3)',
-                    textAlign: 'center',
+          <>
+            <div
+              ref={scrollRef}
+              className="h-full w-full overflow-auto"
+              style={{ scrollBehavior: 'auto' }}
+            >
+              {isFetching ? renderSkeleton() : (
+                <div style={{ paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px` }}>
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 60,
+                    display: 'flex',
+                    height: HEADER_HEIGHT,
+                    width: 'max-content',
                   }}>
-                    <IconHash size={13} style={{ color: 'rgba(255,255,255,0.2)', margin: '0 auto' }} />
-                  </th>
+                    <div style={{
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 70,
+                      width: ROW_NUM_WIDTH,
+                      minWidth: ROW_NUM_WIDTH,
+                      height: HEADER_HEIGHT,
+                      background: '#0F1520',
+                      borderRight: '1px solid rgba(255,255,255,0.1)',
+                      borderBottom: '2px solid rgba(200,146,42,0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <IconHash size={13} style={{ color: 'rgba(255,255,255,0.2)', margin: '0 auto' }} />
+                    </div>
 
-                  {activeCols.map((col, idx) => (
-                    <th
-                      key={col}
-                      style={{
-                        position: idx === 0 ? 'sticky' : 'relative',
-                        left: idx === 0 ? 56 : undefined,
-                        zIndex: idx === 0 ? 70 : 50,
-                        width: colWidths[col] || 180,
-                        minWidth: 120,
-                        height: 44,
-                        background: '#0F1520',
-                        borderRight: '1px solid rgba(255,255,255,0.1)',
-                        borderBottom: '2px solid rgba(200,146,42,0.3)',
-                        padding: '0 16px',
-                        textAlign: 'left',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <span style={{
-                        color: '#c8922a',
-                        fontSize: '10px',
-                        fontWeight: 900,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.12em',
-                      }}>
-                        {col.replace(/_/g, ' ')}
-                      </span>
-                      {/* Resize Handle */}
+                    {activeCols.map((col, idx) => (
                       <div
-                        onMouseDown={(e) => startResize(col, e)}
+                        key={col}
                         style={{
-                          position: 'absolute', right: 0, top: 0,
-                          width: 5, height: '100%',
-                          cursor: 'col-resize',
+                          position: idx === 0 ? 'sticky' : 'relative',
+                          left: idx === 0 ? ROW_NUM_WIDTH : undefined,
+                          zIndex: idx === 0 ? 70 : 50,
+                          width: colWidths[col] || DEFAULT_COL_WIDTH,
+                          minWidth: 120,
+                          height: HEADER_HEIGHT,
+                          background: '#0F1520',
+                          borderRight: '1px solid rgba(255,255,255,0.1)',
+                          borderBottom: '2px solid rgba(200,146,42,0.3)',
+                          padding: '0 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          flexShrink: 0,
+                          boxSizing: 'border-box',
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#c8922a'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                      />
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+                      >
+                        <span style={{
+                          color: '#c8922a',
+                          fontSize: '10px',
+                          fontWeight: 900,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.12em',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {col.replace(/_/g, ' ')}
+                        </span>
+                        <div
+                          onMouseDown={(e) => startResize(col, e)}
+                          style={{
+                            position: 'absolute', right: 0, top: 0,
+                            width: 5, height: '100%',
+                            cursor: 'col-resize',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#c8922a'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        />
+                      </div>
+                    ))}
+                  </div>
 
-              {/* ─── Body ─── */}
-              <tbody>
-                {sortedData.map((row, rIdx) => {
-                  const isSelected = selectedCell?.rIdx === rIdx;
-                  return (
-                    <tr
-                      key={rIdx}
-                      className="sheet-row"
-                      style={{
-                        height: 44,
-                        background: isSelected
-                          ? 'rgba(200,146,42,0.06)'
-                          : rIdx % 2 === 0 ? '#0d1117' : '#111827',
-                        borderLeft: isSelected ? '3px solid #c8922a' : '3px solid transparent',
-                      }}
-                    >
-                      {/* Row Number */}
-                      <td style={{
-                        position: 'sticky', left: 0, zIndex: 40,
-                        width: 56, minWidth: 56,
-                        background: 'inherit',
-                        borderRight: '1px solid rgba(255,255,255,0.06)',
-                        borderBottom: '1px solid rgba(255,255,255,0.04)',
-                        textAlign: 'center',
-                        fontSize: '10px',
-                        fontFamily: 'monospace',
-                        color: 'rgba(255,255,255,0.2)',
-                      }}>
-                        {rIdx + 1}
-                      </td>
-
-                      {activeCols.map((col, cIdx) => {
-                        const rawVal = row[col];
-                        const displayVal = cellText(rawVal);
-                        const isFrozen = cIdx === 0;
-                        const isThisSelected = selectedCell?.rIdx === rIdx && selectedCell?.colName === col;
-
-                        return (
-                          <td
-                            key={col}
-                            title={displayVal}
-                            onClick={(e) => handleCellClick(rawVal, col, rIdx, e)}
-                            style={{
-                              position: isFrozen ? 'sticky' : 'relative',
-                              left: isFrozen ? 56 : undefined,
-                              zIndex: isFrozen ? 30 : 'auto',
-                              width: colWidths[col] || 180,
-                              minWidth: 120,
-                              height: 44,
-                              padding: '0 16px',
-                              background: isThisSelected ? 'rgba(200,146,42,0.08)' : 'inherit',
-                              borderRight: '1px solid rgba(255,255,255,0.04)',
-                              borderBottom: '1px solid rgba(255,255,255,0.04)',
-                              borderColor: isThisSelected ? 'rgba(200,146,42,0.4)' : undefined,
-                              fontSize: '12px',
-                              fontWeight: isFrozen ? 700 : 500,
-                              color: isFrozen ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)',
-                              cursor: 'pointer',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              maxWidth: colWidths[col] || 180,
-                            }}
-                          >
-                            {displayVal}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ─── Cell Content Popover ─── */}
-        {popover && (
-          <div
-            className="cell-popover"
-            style={{
-              position: 'fixed',
-              left: popover.x,
-              top: popover.y,
-              zIndex: 200,
-              background: '#1a1f2e',
-              border: '1px solid rgba(200,146,42,0.4)',
-              borderRadius: 12,
-              padding: 16,
-              maxWidth: 360,
-              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
-            }}
-          >
-            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-              <span style={{ fontSize: 9, fontWeight: 900, color: '#c8922a', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
-                {popover.colName?.replace(/_/g, ' ')}
-              </span>
-              <button onClick={() => setPopover(null)} style={{ padding: 4, color: 'rgba(255,255,255,0.4)' }}>
-                <IconX size={12} />
-              </button>
+                  {virtualRows.map((virtualRow) => {
+                    const row = displayData[virtualRow.index];
+                    const rowWithOverrides = {};
+                    for (const col of activeCols) {
+                      rowWithOverrides[col] = getEffectiveValue(row, virtualRow.index, col);
+                    }
+                    return (
+                      <div
+                        key={virtualRow.key}
+                        data-index={virtualRow.index}
+                        ref={rowVirtualizer.measureElement}
+                      >
+                        <SheetRow
+                          row={rowWithOverrides}
+                          rowIndex={virtualRow.index}
+                          columns={activeCols}
+                          colWidths={colWidths}
+                          selectedCell={selectedCell}
+                          onCellClick={handleCellClick}
+                          onCellDoubleClick={handleCellDoubleClick}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div style={{
-              color: 'white',
-              fontSize: 12,
-              lineHeight: 1.6,
-              fontWeight: 500,
-              maxHeight: 160,
-              overflowY: 'auto',
-              wordBreak: 'break-word',
-            }}>
-              {popover.val}
-            </div>
-          </div>
+
+            {editingCell && (
+              <input
+                ref={editInputRef}
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={handleEditSave}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleEditSave();
+                  }
+                  if (e.key === 'Escape') handleEditCancel();
+                }}
+                style={{
+                  position: 'fixed',
+                  left: editingCell.x,
+                  top: editingCell.y,
+                  width: editingCell.width - 32,
+                  height: editingCell.height,
+                  zIndex: 150,
+                  background: '#0d1117',
+                  border: '2px solid #c8922a',
+                  borderRadius: 2,
+                  color: 'white',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  padding: '0 16px',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+            )}
+
+            {popover && (
+              <div
+                className="cell-popover"
+                style={{
+                  position: 'fixed',
+                  left: popover.x,
+                  top: popover.y,
+                  zIndex: 200,
+                  background: '#1a1f2e',
+                  border: '1px solid rgba(200,146,42,0.4)',
+                  borderRadius: 12,
+                  padding: 16,
+                  maxWidth: 360,
+                  boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+                }}
+              >
+                <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                  <span style={{ fontSize: 9, fontWeight: 900, color: '#c8922a', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+                    {popover.colName?.replace(/_/g, ' ')}
+                  </span>
+                  <button onClick={() => setPopover(null)} style={{ padding: 4, color: 'rgba(255,255,255,0.4)' }}>
+                    <IconX size={12} />
+                  </button>
+                </div>
+                <div style={{
+                  color: 'white',
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                  fontWeight: 500,
+                  maxHeight: 160,
+                  overflowY: 'auto',
+                  wordBreak: 'break-word',
+                }}>
+                  {popover.val}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* ─── Hover styles ─── */}
       <style dangerouslySetInnerHTML={{ __html: `
         .sheet-row:hover {
           background: #1a2035 !important;
           border-left: 3px solid #c8922a !important;
         }
-        .sheet-row:hover td {
+        .sheet-row:hover > div {
           background: inherit !important;
         }
         div::-webkit-scrollbar {
@@ -460,6 +603,10 @@ const Sheets = () => {
         }
         div::-webkit-scrollbar-thumb:hover {
           background: rgba(200,146,42,0.3);
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.8; }
         }
       `}} />
     </div>

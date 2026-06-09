@@ -1,51 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
-  IconClipboardCheck,
-  IconClipboardList,
-  IconAlertCircle,
-  IconHistory,
-  IconClock,
-  IconArrowsDiff,
-  IconForms,
-  IconFileText,
-  IconUsers,
-  IconActivity,
-  IconTrendingUp,
-  IconTrendingDown,
-  IconFilter,
   IconRefresh,
-  IconCheck,
-  IconX,
   IconCalendar,
   IconArrowRight
 } from '@tabler/icons-react';
-import Overview from './Overview';
 import BoxLoader from '../ui/BoxLoader';
 import { SearchBar } from '../ui/search-bar';
 
 const ReviewYear = ({ year, action, onAuditSelect }) => {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAuditPR, setSelectedAuditPR] = useState(null);
+  const queryClient = useQueryClient();
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data = [], isLoading: loading } = useQuery({
+    queryKey: ['review-year', action],
+    queryFn: async () => {
       const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${action}`);
+      if (!response.ok) throw new Error('Failed to fetch review data');
       const result = await response.json();
-      const records = Array.isArray(result) ? result : result.data || [];
-      setData(records);
-    } catch (err) {
-      console.error('Fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [action]);
+      return Array.isArray(result) ? result : (result.data || []);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const fetchData = () => queryClient.invalidateQueries({ queryKey: ['review-year', action] });
 
   const filteredData = data.filter(item => 
     Object.values(item).some(val => 

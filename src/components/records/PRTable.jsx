@@ -1,21 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
 import { 
   Search, 
   Filter, 
-  ArrowUpDown, 
   ChevronRight, 
-  MoreVertical,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus,
   X,
   MessageSquare,
-  Tag,
   Clock,
   History
 } from 'lucide-react';
-import { mockPRData } from '../../data/mockData';
 import { processPRItems } from '../../utils/prUtils';
 
 const StatusBadge = ({ status }) => {
@@ -35,50 +29,7 @@ const StatusBadge = ({ status }) => {
 };
 
 
-const ChangeItem = ({ label, oldVal, newVal, status }) => {
-  const colors = {
-    increase: { text: '#EF4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)' },
-    decrease: { text: '#10B981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.2)' },
-    modified: { text: '#6366F1', bg: 'rgba(99,102,241,0.1)', border: 'rgba(99,102,241,0.2)' },
-    same: { text: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)' }
-  }[status || 'modified'];
 
-  const Icon = {
-    increase: ArrowUpRight,
-    decrease: ArrowDownRight,
-    modified: ChevronRight,
-    same: Minus
-  }[status || 'modified'];
-
-  return (
-    <div className="py-5 border-b border-[rgba(255,255,255,0.05)] last:border-0">
-      <div className="flex justify-between items-center mb-3">
-        <span className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">{label}</span>
-        <span 
-          className="flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-full border uppercase tracking-tighter"
-          style={{ color: colors.text, backgroundColor: colors.bg, borderColor: colors.border }}
-        >
-          <Icon size={12} strokeWidth={3} />
-          {status || 'MODIFIED'}
-        </span>
-      </div>
-      <div className="flex items-center gap-6">
-        <div className="flex-1">
-          <p className="text-[9px] text-[rgba(255,255,255,0.2)] mb-1 uppercase font-bold">PREVIOUS</p>
-          <p className="text-sm font-medium text-[rgba(255,255,255,0.4)] line-through decoration-[rgba(255,255,255,0.1)]">
-            {oldVal || 'N/A'}
-          </p>
-        </div>
-        <div className="flex-1">
-          <p className="text-[9px] text-[rgba(255,255,255,0.2)] mb-1 uppercase font-bold">CURRENT</p>
-          <p className="text-sm font-bold text-white">
-            {newVal || 'N/A'}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const HistoryCard = ({ state }) => {
   return (
@@ -117,32 +68,23 @@ const PRTable = ({ showChangesOnly = false }) => {
   const [selectedPR, setSelectedPR] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [comments, setComments] = useState('');
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
-        const json = await response.json();
-        let rawItems = [];
-        if (Array.isArray(json)) {
-          rawItems = json[0]?.data || json;
-        } else if (json?.data) {
-          rawItems = json.data;
-        }
-        
-        const processed = processPRItems(rawItems);
-        setData(processed);
-      } catch (err) {
-        console.error('Fetch error:', err);
-      } finally {
-        setLoading(false);
+  const { data = [], isLoading: loading } = useQuery({
+    queryKey: ['pr-records'],
+    queryFn: async () => {
+      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
+      if (!response.ok) throw new Error('Failed to fetch records');
+      const json = await response.json();
+      let rawItems = [];
+      if (Array.isArray(json)) {
+        rawItems = json[0]?.data || json;
+      } else if (json?.data) {
+        rawItems = json.data;
       }
-    };
-    fetchData();
-  }, []);
+      return processPRItems(rawItems);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   const filteredData = data
     .filter(pr => showChangesOnly ? pr._hasChanges : true)

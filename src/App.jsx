@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   IconBell,
   IconClipboardList,
@@ -26,16 +27,27 @@ import QuoteRegister from './components/quotes/QuoteRegister';
 import Login from './components/auth/Login';
 import UserManagement from './components/admin/UserManagement';
 import Overview from './components/dashboard/Overview';
+import ProcurementIntelligence from './components/dashboard/ProcurementIntelligence';
 
 const SIDEBAR_W = 260;
+const SESSION_DURATION = 6 * 60 * 60 * 1000; // 6 hours
 
 const App = () => {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('scale_pods_user');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    const loginTime = parseInt(localStorage.getItem('scale_pods_session_time') || '0', 10);
+    if (Date.now() - loginTime > SESSION_DURATION) {
+      localStorage.removeItem('scale_pods_user');
+      localStorage.removeItem('scale_pods_session_time');
+      return null;
+    }
+    return parsed;
   });
-  const [activeTab, setActiveTab] = useState('polog');
+  const [activeTab, setActiveTab] = useState('po-dashboard');
   const [selectedPR, setSelectedPR] = useState(null);
+  const queryClient = useQueryClient();
 
   // Diagnostic logging to track role changes
   useEffect(() => {
@@ -48,15 +60,47 @@ const App = () => {
     }
   }, [user]);
 
+  // Session timeout check every 30 seconds
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      const loginTime = parseInt(localStorage.getItem('scale_pods_session_time') || '0', 10);
+      if (Date.now() - loginTime > SESSION_DURATION) {
+        handleLogout();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Prefetch dashboard data on login so charts render instantly
+  useEffect(() => {
+    if (!user) return;
+    const baseUrl = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978';
+    const flatItems = (json) => {
+      let raw = [];
+      if (Array.isArray(json)) {
+        if (json[0]?.data && Array.isArray(json[0].data)) raw = json[0].data;
+        else if (json[0] && Array.isArray(json[0])) raw = json[0];
+        else raw = json;
+      } else if (json?.data) {
+        raw = Array.isArray(json.data) ? json.data : [];
+      }
+      return raw.filter(item => item && typeof item === 'object' && !Array.isArray(item));
+    };
+    queryClient.prefetchQuery({ queryKey: ['po-data-intel'], queryFn: async () => { const r = await fetch(`${baseUrl}?action=PO%20Data`); if (!r.ok) throw new Error('Failed'); const j = await r.json(); return flatItems(j); }, staleTime: 5 * 60 * 1000 });
+  }, [user, queryClient]);
+
   const handleLogin = (userData) => {
     console.log('Login event triggered with data:', userData);
     setUser(userData);
     localStorage.setItem('scale_pods_user', JSON.stringify(userData));
+    localStorage.setItem('scale_pods_session_time', String(Date.now()));
   };
 
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('scale_pods_user');
+    localStorage.removeItem('scale_pods_session_time');
   };
 
   const handleSelectPR = (pr) => {
@@ -77,7 +121,7 @@ const App = () => {
   // Purchase Order Request group
   const poRequestNav = [
     { id: 'po-dashboard', label: 'Dashboard', icon: IconLayoutDashboard },
-    { id: 'polog', label: 'PR Uploads', icon: IconDatabaseImport },
+    { id: 'polog', label: 'PR Uploads', icon: IconDatabaseImport, restricted: true },
     { id: 'prlist', label: 'PR List', icon: IconPackage },
   ];
 
@@ -404,23 +448,24 @@ const App = () => {
         {/* Dynamic Content */}
         <div className={activeTab === 'sheets' || activeTab === 'polog' || activeTab === 'prlist' ? "flex-1 w-full overflow-hidden" : "flex-1 w-full overflow-y-auto"}>
           {/* Purchase Order Request */}
-          {activeTab === 'po-dashboard' && <ReviewDashboard />}
-          {activeTab === 'polog' && <POLog initialPR={selectedPR} />}
+          {activeTab === 'po-dashboard' && <ProcurementIntelligence />}
+          {activeTab === 'polog' && !isViewer && <POLog initialPR={selectedPR} />}
+          {activeTab === 'polog' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access PR Uploads.</div>}
           {activeTab === 'prlist' && <POLog mode="prlist" />}
 
           {/* Review Data */}
-          {activeTab === 'review-dashboard' && <Overview />}
+          {activeTab === 'review-dashboard' && <ReviewDashboard />}
           {activeTab === 'review2025' && <ReviewYear year="2025" action="25" onAuditSelect={handleSelectPR} />}
           {activeTab === 'review2026' && <ReviewYear year="2026" action="26" onAuditSelect={handleSelectPR} />}
-          {activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
+{activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
           {activeTab === 'sheets' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Sheets.</div>}
 
           {/* Purchase Quote Register */}
-          {activeTab === 'qr-dashboard' && <QuoteRegister subView="dashboard" />}
-          {activeTab === 'qr-data' && <QuoteRegister subView="data" />}
-          {activeTab === 'qr-material' && <QuoteRegister subView="material" />}
-          {activeTab === 'qr-upload' && !isViewer && <QuoteRegister subView="upload" />}
-          {activeTab === 'qr-upload' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Upload Data.</div>}
+          {activeTab.startsWith('qr-') && (
+            (activeTab === 'qr-upload' && isViewer) 
+              ? <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Upload Data.</div>
+              : <QuoteRegister subView={activeTab.split('-')[1]} />
+          )}
 
           {/* Admin */}
           {activeTab === 'users' && isAdmin && <UserManagement />}

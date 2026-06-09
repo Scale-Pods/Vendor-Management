@@ -1,4 +1,5 @@
-﻿import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   IconClipboardData,
   IconTrash,
@@ -335,6 +336,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   const [remarksInput, setRemarksInput] = useState({}); // { [rowKey]: string } — temp state inside comparison modal
   const [rateSummaryMap, setRateSummaryMap] = useState({}); // { [prRef]: { subtotal, discount, charges, net, manualTotal } }
   const [isImporting, setIsImporting] = useState(false);
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [toast, setToast] = useState(null);
   const textareaRef = useRef(null);
 
@@ -349,11 +351,43 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   const [dialogCountdown, setDialogCountdown] = useState(2);
   const timerRef = useRef(null);
 
-  // Existing log
-  const [logData, setLogData] = useState([]);
-  const [logLoading, setLogLoading] = useState(false);
-  const [poMasterData, setPoMasterData] = useState([]);
-  const [poMasterLoading, setPoMasterLoading] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: logData = [], isLoading: logLoading } = useQuery({
+    queryKey: ['po-log-data'],
+    queryFn: async () => {
+      const response = await fetch(FETCH_WEBHOOK);
+      if (!response.ok) throw new Error('Failed to fetch PO log');
+      const json = await response.json();
+      let data = [];
+      if (Array.isArray(json)) {
+        data = json[0]?.data && Array.isArray(json[0].data) ? json[0].data : json;
+      } else if (json?.data && Array.isArray(json.data)) {
+        data = json.data;
+      }
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: poMasterData = [], isLoading: poMasterLoading } = useQuery({
+    queryKey: ['po-master-data'],
+    queryFn: async () => {
+      const response = await fetch(`/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=merged`);
+      if (!response.ok) throw new Error('Failed to fetch master data');
+      const json = await response.json();
+      let data = [];
+      if (Array.isArray(json)) {
+        data = json[0]?.data && Array.isArray(json[0].data) ? json[0].data : json;
+      } else if (json?.data && Array.isArray(json.data)) {
+        data = json.data;
+      }
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const fetchLogData = () => queryClient.invalidateQueries({ queryKey: ['po-log-data'] });
   const [logSearch, setLogSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState('All');
   const [enteredByFilter, setEnteredByFilter] = useState('All');
@@ -1365,7 +1399,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
       setToast({ message: `${parsedRows.length} rows saved successfully`, type: 'success' });
       handleClear();
-      fetchLogData(); // Refresh existing log
+      fetchLogData(); // Invalidate cache to show new data
     } catch (err) {
       console.error('Import error:', err);
       setToast({ message: `Save failed: ${err.message}`, type: 'error' });
@@ -1374,71 +1408,38 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     }
   };
 
-  /* â”€â”€â”€ Fetch existing log â”€â”€â”€ */
-  const fetchLogData = useCallback(async () => {
-    setLogLoading(true);
-    try {
-      const response = await fetch(FETCH_WEBHOOK);
-      const json = await response.json();
+  // Webhook-driven fetches are handled by TanStack Query
 
-      let data = [];
-      if (Array.isArray(json)) {
-        data = json[0]?.data && Array.isArray(json[0].data) ? json[0].data : json;
-      } else if (json?.data && Array.isArray(json.data)) {
-        data = json.data;
+  const getLatestTotal = useCallback((item) => {
+    // Check in reverse order of versions for the latest price
+    for (let i = 5; i >= 1; i--) {
+      const keys = [`change${i}_total`, `change${i}_price`, `change${i}_Total`, `change${i}_Price` ];
+      for (const k of keys) {
+        const val = item[k];
+        if (val !== null && val !== undefined && val !== '') {
+          const num = parseFloat(String(val).replace(/,/g, ''));
+          if (!isNaN(num) && num !== 0) return num;
+        }
       }
-
-      // Preserve original order returned by the API
-
-      setLogData(data);
-    } catch (err) {
-      console.error('Failed to fetch PO log:', err);
-    } finally {
-      setLogLoading(false);
     }
-  }, []);
 
-  const fetchPoMasterData = useCallback(async () => {
-    setPoMasterLoading(true);
-    try {
-      const response = await fetch(`/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=merged`);
-      const json = await response.json();
-      let data = [];
-      if (Array.isArray(json)) {
-        data = json[0]?.data && Array.isArray(json[0].data) ? json[0].data : json;
-      } else if (json?.data && Array.isArray(json.data)) {
-        data = json.data;
-      }
-      setPoMasterData(data);
-    } catch (err) {
-      console.error('Failed to fetch purchase_orders:', err);
-    } finally {
-      setPoMasterLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchLogData();
-    fetchPoMasterData();
-  }, [fetchLogData, fetchPoMasterData]);
-
-  const getLatestTotal = (item) => {
-    for (let i = 5; i >= 2; i--) {
-      const val = item[`change${i}_total`] ?? item[`change${i}_price`] ?? item[`change${i}_Total`] ?? item[`change${i}_Price`];
+    const fallbackKeys = ['Total Price', 'Net Price', 'Total', 'total', 'Price', 'price', 'Amount', 'amount'];
+    for (const k of fallbackKeys) {
+      const val = item[k];
       if (val !== null && val !== undefined && val !== '') {
         const num = parseFloat(String(val).replace(/,/g, ''));
-        if (!isNaN(num)) return num;
+        if (!isNaN(num) && num !== 0) return num;
       }
     }
-    const fallback = item.change1_total ?? item.change1_price ?? item.change1_Total ?? item.change1_Price ?? item.Total ?? item.total ?? 0;
-    const num = parseFloat(String(fallback).replace(/,/g, ''));
-    return isNaN(num) ? 0 : num;
-  };
+    return 0;
+  }, []);
 
   const uniqueMonths = useMemo(() => {
     const months = new Set();
     logData.forEach(row => {
-      if (row.Month) months.add(row.Month);
+      if (!row.Month) return;
+      if (/AM|PM/i.test(row.Month)) return;
+      months.add(row.Month);
     });
     
     const monthMap = {
@@ -1567,13 +1568,13 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       uniqueSuppliers: uniqueSuppliers.size,
       totalItems: poMasterData.length,
     };
-  }, [poMasterData]);
+  }, [poMasterData, getLatestTotal]);
 
   const parsePODate = useCallback((value) => {
     if (!value) return null;
     const d = new Date(value);
     if (!isNaN(d)) return d;
-    const parts = value.trim().split(/[\s\/\-\.]+/);
+    const parts = value.trim().split(/[\s/\-.]+/);
     if (parts.length >= 3) {
       const day = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10);
@@ -1622,7 +1623,9 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     if (!poMasterData.length) return [];
     const projMap = {};
     poMasterData.forEach(item => {
-      const project = item.project || item.Project || 'Unknown';
+      let projectRaw = (item.project || item.Project || 'Unknown').trim();
+      const project = projectRaw.startsWith('AMANA ') ? 'S' + projectRaw : projectRaw;
+      
       const total = getLatestTotal(item);
       if (!projMap[project]) projMap[project] = { project, totalInvested: 0, prCount: new Set(), itemCount: 0 };
       projMap[project].totalInvested += total;
@@ -1632,6 +1635,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     });
     return Object.values(projMap)
       .map(p => ({ ...p, prCount: p.prCount.size }))
+      .filter(p => p.totalInvested > 0) // Remove items with value 0
       .sort((a, b) => b.totalInvested - a.totalInvested);
   }, [poMasterData, getLatestTotal]);
 
@@ -1639,7 +1643,12 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     if (!poMasterData.length) return [];
     const freqMap = {};
     poMasterData.forEach(item => {
-      const desc = (item.Description || item.description || '').trim();
+      const rawDesc = String(
+        item.Description || item.description || item.desc ||
+        item.item_description || item.change1_description ||
+        item.Material || item.material || ''
+      ).trim();
+      const desc = rawDesc ? rawDesc.split(' - ')[0].trim() : '';
       const key = desc || 'Unknown';
       if (!freqMap[key]) {
         freqMap[key] = { description: desc || 'Unknown', count: 0, totalQty: 0, totalSpend: 0, suppliers: new Set() };
@@ -1653,6 +1662,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     });
     return Object.values(freqMap)
       .map(m => ({ ...m, suppliers: m.suppliers.size }))
+      .filter(m => m.totalSpend > 0) // Remove items with value 0
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
   }, [poMasterData, getLatestTotal]);
@@ -1715,7 +1725,18 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         if (response.ok) {
           anySuccess = true;
           const data = await response.json();
-          const existingData = Array.isArray(data) ? data : (data.data || data.items || []);
+          const n8nData = Array.isArray(data) ? data : (data.data || data.items || []);
+          const existingData = n8nData.map(item => {
+            const projRaw = (item.Project || 'Unknown').trim();
+            return {
+              ...item,
+              PR: item['Req Ref'] || item.Ref || 'N/A',
+              Description: item.Description || item.Ref || 'No Description',
+              Project: projRaw.startsWith('AMANA ') ? 'S' + projRaw : projRaw,
+              Supplier: item.Supplier || 'Unknown',
+              change1_total: parseFloat(String(item['Original Pirce'] || item['Net Price'] || item['Total Price'] || 0).replace(/,/g, ''))
+            };
+          });
           allExistingData = [...allExistingData, ...existingData];
         }
       }
@@ -1878,254 +1899,6 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
       <div className="flex-1 overflow-y-auto p-6 space-y-10">
         {mode !== 'prlist' && (<>
-        {/* â•â•â•â•â•â•â•â•â•â•â• DASHBOARD OVERVIEW â•â•â•â•â•â•â•â•â•â•â• */}
-        {dashboardStats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 stagger-item" style={{ animationDelay: '0ms' }}>
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-              <IconWallet size={64} className="text-[#F59E0B]" />
-            </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Managed Spend</p>
-            <h4 className="text-3xl font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</h4>
-            <div className="flex items-center gap-1.5 mt-4 text-[#10B981]">
-              <IconArrowUpRight size={14} stroke={3} />
-              <span className="text-[11px] font-black uppercase tracking-tight">+12% from last cycle</span>
-            </div>
-          </div>
-
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-              <IconReceipt2 size={64} className="text-[#F59E0B]" />
-            </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Purchase Requests</p>
-            <h4 className="text-3xl font-black text-white">{dashboardStats.uniquePRs}</h4>
-            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Total PRs currently tracked</p>
-          </div>
-
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-              <IconPackage size={64} className="text-[#F59E0B]" />
-            </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Active Suppliers</p>
-            <h4 className="text-3xl font-black text-white">{dashboardStats.uniqueSuppliers}</h4>
-            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Trusted vendor network size</p>
-          </div>
-
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-              <IconClipboardData size={64} className="text-[#F59E0B]" />
-            </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Line Items</p>
-            <h4 className="text-3xl font-black text-white">{dashboardStats.totalItems?.toLocaleString()}</h4>
-            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Items across all projects</p>
-          </div>
-        </div>
-        )}
-
-        {/* Spend Breakdown by Period */}
-        {spendBreakdownData.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '50ms' }}>
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                {drillMonth ? (
-                  <button
-                    onClick={() => setDrillMonth(null)}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider text-[#F59E0B] hover:bg-[rgba(245,158,11,0.1)] transition-all"
-                  >
-                    <IconChevronLeft size={14} /> Back
-                  </button>
-                ) : null}
-                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">
-                  {drillMonth
-                    ? new Date(drillMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })
-                    : 'Spend Breakdown'}
-                </p>
-                {!drillMonth && spendPeriod === 'Monthly' && (
-                  <span className="text-[8px] text-[rgba(255,255,255,0.2)] font-medium ml-1">click month bar to drill</span>
-                )}
-              </div>
-              <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] rounded-lg p-0.5">
-                {['Monthly', 'Yearly'].map(p => (
-                  <button
-                    key={p}
-                    onClick={() => { setSpendPeriod(p); setDrillMonth(null); }}
-                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${
-                      spendPeriod === p && !drillMonth
-                        ? 'bg-[#F59E0B] text-black shadow-lg'
-                        : 'text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)]'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="h-[200px]">
-              {spendBreakdownData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={spendBreakdownData} margin={{ top: 5, right: 10, left: 10, bottom: 20 }}>
-                    <XAxis
-                      dataKey="period"
-                      stroke="rgba(255,255,255,0.2)"
-                      fontSize={10}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: 'rgba(255,255,255,0.4)' }}
-                      tickFormatter={(val) => {
-                        if (drillMonth) return val;
-                        const [y, m] = val.split('-');
-                        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                        return `${months[parseInt(m, 10) - 1]}-${y.slice(2)}`;
-                      }}
-                      angle={drillMonth ? -45 : 0}
-                      textAnchor={drillMonth ? 'end' : 'middle'}
-                      height={drillMonth ? 60 : 30}
-                    />
-                    <YAxis
-                      stroke="rgba(255,255,255,0.2)"
-                      fontSize={10}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: 'rgba(255,255,255,0.4)' }}
-                      tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}
-                    />
-                    <RechartsTooltip
-                      cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                      contentStyle={{ background: '#121824', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
-                      labelStyle={{ color: 'white', fontWeight: 'bold', marginBottom: '4px' }}
-                      itemStyle={{ color: '#F59E0B', fontWeight: 'bold' }}
-                      formatter={(v) => [`AED ${v.toLocaleString()}`, 'Spend']}
-                    />
-                    <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={drillMonth ? 20 : 32}>
-                      {spendBreakdownData.map((entry) => (
-                        <Cell
-                          key={entry.period}
-                          fill="#F59E0B"
-                          style={{ cursor: spendPeriod === 'Monthly' && !drillMonth ? 'pointer' : 'default' }}
-                          onClick={() => {
-                            if (spendPeriod === 'Monthly' && !drillMonth) setDrillMonth(entry.period);
-                          }}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-[rgba(255,255,255,0.2)] text-[11px] font-bold uppercase tracking-wider">
-                  No period data available
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        )}
-
-        {/* Project Wise Money Invested */}
-        {projectData.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '75ms' }}>
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-1.5 h-6 rounded-full bg-[#10B981]" />
-                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project Wise Money Invested</p>
-              </div>
-              <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
-                {poMasterData.length} line items
-              </span>
-            </div>
-            {poMasterLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-6 h-6 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-[rgba(255,255,255,0.06)]">
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">#</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Project</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Invested (AED)</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">PRs</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Line Items</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
-                  {projectData.map((p, idx) => (
-                    <tr key={p.project} className="hover:bg-[rgba(16,185,129,0.03)] transition-colors">
-                      <td className="py-3 text-[11px] text-[rgba(255,255,255,0.25)] font-bold">{idx + 1}</td>
-                      <td className="py-3 text-[13px] text-white font-bold">{p.project}</td>
-                      <td className="py-3 text-[13px] text-[#10B981] font-black text-right tabular-nums">
-                        {p.totalInvested >= 1000000
-                          ? `AED ${(p.totalInvested / 1000000).toFixed(2)}M`
-                          : `AED ${p.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                      </td>
-                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{p.prCount}</td>
-                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{p.itemCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* Materials Maximum Time Purchased */}
-        {topMaterials.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '100ms' }}>
-          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
-                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Materials Maximum Time Purchased</p>
-              </div>
-              <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
-                Top {Math.min(topMaterials.length, 10)} of {poMasterData.length} items
-              </span>
-            </div>
-            {poMasterLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-6 h-6 border-2 border-[#F59E0B] border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-[rgba(255,255,255,0.06)]">
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">#</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Material Description</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Times Ordered</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Qty</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Spend (AED)</th>
-                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Suppliers</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
-                  {topMaterials.map((m, idx) => (
-                    <tr key={m.description} className="hover:bg-[rgba(245,158,11,0.03)] transition-colors">
-                      <td className="py-3 text-[11px] text-[rgba(255,255,255,0.25)] font-bold">{idx + 1}</td>
-                      <td className="py-3 text-[13px] text-white font-bold max-w-[300px] truncate" title={m.description}>{m.description}</td>
-                      <td className="py-3 text-[13px] text-white font-black text-right">{m.count}x</td>
-                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right tabular-nums">{m.totalQty.toLocaleString()}</td>
-                      <td className="py-3 text-[13px] text-[#10B981] font-black text-right tabular-nums">
-                        {m.totalSpend >= 1000000
-                          ? `AED ${(m.totalSpend / 1000000).toFixed(2)}M`
-                          : m.totalSpend >= 1000
-                            ? `AED ${(m.totalSpend / 1000).toFixed(0)}K`
-                            : `AED ${m.totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                      </td>
-                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{m.suppliers}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            )}
-          </div>
-        </div>
-        )}
 
         {!isViewer && (
         <div className="stagger-item" style={{ animationDelay: '0ms' }}>
@@ -2962,6 +2735,267 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               </button>
             </div>
           </div>
+        )}
+        {/* â•â•â•â•â•â•â•â•â•â•â• DASHBOARD OVERVIEW â•â•â•â•â•â•â•â•â•â•â• */}
+        {dashboardStats && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 stagger-item" style={{ animationDelay: '0ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconWallet size={64} className="text-[#F59E0B]" />
+            </div>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Managed Spend</p>
+            <h4 className="text-3xl font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</h4>
+            <div className="flex items-center gap-1.5 mt-4 text-[#10B981]">
+              <IconArrowUpRight size={14} stroke={3} />
+              <span className="text-[11px] font-black uppercase tracking-tight">+12% from last cycle</span>
+            </div>
+          </div>
+
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconReceipt2 size={64} className="text-[#F59E0B]" />
+            </div>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Purchase Requests</p>
+            <h4 className="text-3xl font-black text-white">{dashboardStats.uniquePRs}</h4>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Total PRs currently tracked</p>
+          </div>
+
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconPackage size={64} className="text-[#F59E0B]" />
+            </div>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Active Suppliers</p>
+            <h4 className="text-3xl font-black text-white">{dashboardStats.uniqueSuppliers}</h4>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Trusted vendor network size</p>
+          </div>
+
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+              <IconClipboardData size={64} className="text-[#F59E0B]" />
+            </div>
+            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Line Items</p>
+            <h4 className="text-3xl font-black text-white">{dashboardStats.totalItems?.toLocaleString()}</h4>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Items across all projects</p>
+          </div>
+        </div>
+        )}
+
+        {/* Spend Breakdown by Period */}
+        {spendBreakdownData.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '50ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                {drillMonth ? (
+                  <button
+                    onClick={() => setDrillMonth(null)}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider text-[#F59E0B] hover:bg-[rgba(245,158,11,0.1)] transition-all"
+                  >
+                    <IconChevronLeft size={14} /> Back
+                  </button>
+                ) : null}
+                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">
+                  {drillMonth
+                    ? new Date(drillMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })
+                    : 'Spend Breakdown'}
+                </p>
+                {!drillMonth && spendPeriod === 'Monthly' && (
+                  <span className="text-[8px] text-[rgba(255,255,255,0.2)] font-medium ml-1">click month bar to drill</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] rounded-lg p-0.5">
+                {['Monthly', 'Yearly'].map(p => (
+                  <button
+                    key={p}
+                    onClick={() => { setSpendPeriod(p); setDrillMonth(null); }}
+                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${
+                      spendPeriod === p && !drillMonth
+                        ? 'bg-[#F59E0B] text-black shadow-lg'
+                        : 'text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)]'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="h-[200px]">
+              {spendBreakdownData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={spendBreakdownData} margin={{ top: 5, right: 10, left: 10, bottom: 20 }}>
+                    <XAxis
+                      dataKey="period"
+                      stroke="rgba(255,255,255,0.2)"
+                      fontSize={10}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'rgba(255,255,255,0.4)' }}
+                      tickFormatter={(val) => {
+                        if (drillMonth) return val;
+                        const [y, m] = val.split('-');
+                        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        return `${months[parseInt(m, 10) - 1]}-${y.slice(2)}`;
+                      }}
+                      angle={drillMonth ? -45 : 0}
+                      textAnchor={drillMonth ? 'end' : 'middle'}
+                      height={drillMonth ? 60 : 30}
+                    />
+                    <YAxis
+                      stroke="rgba(255,255,255,0.2)"
+                      fontSize={10}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'rgba(255,255,255,0.4)' }}
+                      tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}
+                    />
+                    <RechartsTooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                      contentStyle={{ background: '#121824', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
+                      labelStyle={{ color: 'white', fontWeight: 'bold', marginBottom: '4px' }}
+                      itemStyle={{ color: '#F59E0B', fontWeight: 'bold' }}
+                      formatter={(v) => [`AED ${v.toLocaleString()}`, 'Spend']}
+                    />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={drillMonth ? 20 : 32}>
+                      {spendBreakdownData.map((entry) => (
+                        <Cell
+                          key={entry.period}
+                          fill="#F59E0B"
+                          style={{ cursor: spendPeriod === 'Monthly' && !drillMonth ? 'pointer' : 'default' }}
+                          onClick={() => {
+                            if (spendPeriod === 'Monthly' && !drillMonth) setDrillMonth(entry.period);
+                          }}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-[rgba(255,255,255,0.2)] text-[11px] font-bold uppercase tracking-wider">
+                  No period data available
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Project Wise Money Invested */}
+        {projectData.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '75ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-6 rounded-full bg-[#10B981]" />
+                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project Wise Money Invested</p>
+              </div>
+              <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
+                {poMasterData.length} line items
+              </span>
+            </div>
+            {poMasterLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-6 h-6 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-[rgba(255,255,255,0.06)]">
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">#</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Project</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Invested (AED)</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">PRs</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Line Items</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
+                  {(showAllProjects ? projectData : projectData.slice(0, 7)).map((p, idx) => (
+                    <tr key={p.project} className="hover:bg-[rgba(16,185,129,0.03)] transition-colors">
+                      <td className="py-3 text-[11px] text-[rgba(255,255,255,0.25)] font-bold">{idx + 1}</td>
+                      <td className="py-3 text-[13px] text-white font-bold">{p.project}</td>
+                      <td className="py-3 text-[13px] text-[#10B981] font-black text-right tabular-nums">
+                        {p.totalInvested >= 1000000
+                          ? `AED ${(p.totalInvested / 1000000).toFixed(2)}M`
+                          : `AED ${p.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      </td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{p.prCount}</td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{p.itemCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {projectData.length > 7 && (
+                <button
+                  onClick={() => setShowAllProjects(!showAllProjects)}
+                  className="mt-3 w-full text-[11px] font-black uppercase tracking-wider py-2 rounded-lg transition-all"
+                  style={{
+                    background: 'rgba(16,185,129,0.06)',
+                    color: '#10B981',
+                    border: '1px solid rgba(16,185,129,0.15)',
+                  }}
+                >
+                  {showAllProjects ? 'Show Less' : `Show All (${projectData.length} Projects)`}
+                </button>
+              )}
+            </div>
+            )}
+          </div>
+        </div>
+        )}
+
+        {/* Materials Maximum Time Purchased */}
+        {topMaterials.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 stagger-item" style={{ animationDelay: '100ms' }}>
+          <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
+                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Materials Maximum Time Purchased</p>
+              </div>
+              <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
+                Top {Math.min(topMaterials.length, 10)} of {poMasterData.length} items
+              </span>
+            </div>
+            {poMasterLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-6 h-6 border-2 border-[#F59E0B] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-[rgba(255,255,255,0.06)]">
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">#</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider">Material Description</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Times Ordered</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Qty</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Total Spend (AED)</th>
+                    <th className="pb-3 text-[10px] font-black text-[rgba(255,255,255,0.25)] uppercase tracking-wider text-right">Suppliers</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
+                  {topMaterials.map((m, idx) => (
+                    <tr key={m.description} className="hover:bg-[rgba(245,158,11,0.03)] transition-colors">
+                      <td className="py-3 text-[11px] text-[rgba(255,255,255,0.25)] font-bold">{idx + 1}</td>
+                      <td className="py-3 text-[13px] text-white font-bold max-w-[300px] truncate" title={m.description}>{m.description}</td>
+                      <td className="py-3 text-[13px] text-white font-black text-right">{m.count}x</td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right tabular-nums">{m.totalQty.toLocaleString()}</td>
+                      <td className="py-3 text-[13px] text-[#10B981] font-black text-right tabular-nums">
+                        {m.totalSpend >= 1000000
+                          ? `AED ${(m.totalSpend / 1000000).toFixed(2)}M`
+                          : m.totalSpend >= 1000
+                            ? `AED ${(m.totalSpend / 1000).toFixed(0)}K`
+                            : `AED ${m.totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      </td>
+                      <td className="py-3 text-[13px] text-[rgba(255,255,255,0.6)] font-semibold text-right">{m.suppliers}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            )}
+          </div>
+        </div>
         )}
         </>)}
         {mode === 'prlist' && (

@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  IconUserPlus, 
+import {
+  IconUserPlus,
   IconShieldLock,
-  IconTrash
+  IconTrash,
+  IconEye,
+  IconEyeOff
 } from '@tabler/icons-react';
 
 const FETCH_USERS_URL = '/api/n8n/webhook/fccc9ea9-d7ea-4dff-a95c-b9031990d5ff';
@@ -13,6 +15,7 @@ const UserManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [newUser, setNewUser] = useState({ email: '', role: 'viewer', password: '', sendEmail: true });
   const [isAddingUser, setIsAddingUser] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState({});
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
@@ -226,6 +229,7 @@ const UserManagement = () => {
                 <th className="py-4 px-6 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)]">User Account</th>
                 <th className="py-4 px-6 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)]">Access Level</th>
                 <th className="py-4 px-6 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)]">Status</th>
+                <th className="py-4 px-6 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)]">Password</th>
                 <th className="py-4 px-6 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)]">Last Login</th>
                 <th className="py-4 px-6 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)] text-right">Actions</th>
               </tr>
@@ -233,7 +237,7 @@ const UserManagement = () => {
             <tbody className="divide-y divide-card">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="py-20 text-center">
+                  <td colSpan={6} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-10 h-10 border-2 border-[#F59E0B] border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs font-bold text-[rgba(255,255,255,0.4)] uppercase tracking-widest">Fetching user database...</span>
@@ -280,6 +284,20 @@ const UserManagement = () => {
                     </div>
                   </td>
                   
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-mono text-[rgba(255,255,255,0.7)]">
+                        {visiblePasswords[user.id] ? (user.password || user.Password || '—') : '••••••••'}
+                      </span>
+                      <button
+                        onClick={() => setVisiblePasswords(prev => ({ ...prev, [user.id]: !prev[user.id] }))}
+                        className="p-1 rounded hover:bg-[rgba(255,255,255,0.1)] text-muted-foreground hover:text-white transition-colors"
+                        title={visiblePasswords[user.id] ? 'Hide Password' : 'Show Password'}
+                      >
+                        {visiblePasswords[user.id] ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                      </button>
+                    </div>
+                  </td>
                   <td className="py-4 px-6 text-[12px] text-[rgba(255,255,255,0.4)]">
                     {user.lastLogin || 'Never'}
                   </td>
