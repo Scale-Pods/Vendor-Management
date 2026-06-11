@@ -7,7 +7,8 @@ import {
 import { 
   IconClipboardList, IconListCheck, IconTrendingUp, IconTrendingDown, 
   IconUsers, IconLayoutDashboard, IconArrowUpRight, IconArrowDownRight,
-  IconFilter, IconRefresh, IconAlertTriangle, IconVersions, IconArrowsDiff
+  IconFilter, IconRefresh, IconAlertTriangle, IconVersions, IconArrowsDiff,
+  IconCalendar
 } from '@tabler/icons-react';
 import { supabase } from '../../lib/supabase';
 import { SearchBar } from '../ui/search-bar';
@@ -115,6 +116,30 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
+  });
+
+  const { data: prCount2025 = 0 } = useQuery({
+    queryKey: ['review-pr-count-2025'],
+    queryFn: async () => {
+      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
+      if (!response.ok) throw new Error('Failed to fetch 2025 data');
+      const result = await response.json();
+      const data = Array.isArray(result) ? result : (result.data || []);
+      return new Set(data.map(item => item.PR || item.pr || item.PR_No)).size;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: prCount2026 = 0 } = useQuery({
+    queryKey: ['review-pr-count-2026'],
+    queryFn: async () => {
+      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=26`);
+      if (!response.ok) throw new Error('Failed to fetch 2026 data');
+      const result = await response.json();
+      const data = Array.isArray(result) ? result : (result.data || []);
+      return new Set(data.map(item => item.PR || item.pr || item.PR_No)).size;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   /* ─── Helper: Get Latest Total ─── */
@@ -363,7 +388,8 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-5">
         <KPIStore title="Total PRs" value={stats?.totalPRs || 0} icon={IconClipboardList} color={COLORS.gold} loading={loading} />
         <KPIStore title="Items with Price Changes" value={stats?.itemsWithChanges || 0} icon={IconTrendingUp} color={COLORS.amber} loading={loading} />
-        <KPIStore title="Items with Multiple Changes" value={stats?.itemsWithMultiple || 0} icon={IconRefresh} color="#a855f7" loading={loading} />
+        <KPIStore title="Changes in PR 2025" value={prCount2025} icon={IconCalendar} color="#3b82f6" loading={loading} />
+        <KPIStore title="Changes in PR 2026" value={prCount2026} icon={IconCalendar} color="#8b5cf6" loading={loading} />
       </div>
 
       {/* Row 2 Currency KPI */}
