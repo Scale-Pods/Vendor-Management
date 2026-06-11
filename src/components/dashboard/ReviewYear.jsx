@@ -18,7 +18,12 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
       const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${action}`);
       if (!response.ok) throw new Error('Failed to fetch review data');
       const result = await response.json();
-      return Array.isArray(result) ? result : (result.data || []);
+      const data = Array.isArray(result) ? result : (result.data || []);
+      return data.map(item => ({
+        ...item,
+        PR: item.PR || item.pr || item.PR_No || 'N/A',
+        Project: item.Project || item.project || 'N/A',
+      }));
     },
     staleTime: 5 * 60 * 1000,
   });

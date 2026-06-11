@@ -365,7 +365,13 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       } else if (json?.data && Array.isArray(json.data)) {
         data = json.data;
       }
-      return data || [];
+      return (data || []).map(row => {
+        if (/AM|PM/i.test(row.Month) && row.po_date) {
+          const match = row.po_date.match(/^[\d]+-([A-Za-z]+)/);
+          if (match) row.Month = match[1];
+        }
+        return row;
+      });
     },
     staleTime: 5 * 60 * 1000,
   });

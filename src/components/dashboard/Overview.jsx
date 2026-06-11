@@ -77,7 +77,7 @@ const Overview = ({
 }) => {
   const [poSearch, setPoSearch] = useState(initialPR || '');
 
-  const { data: poMasterData = [], isLoading: loading } = useQuery({
+  const { data: rawMasterData = [], isLoading: loading } = useQuery({
     queryKey: ['po-data'],
     queryFn: async () => {
       const baseUrl = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978';
@@ -96,6 +96,19 @@ const Overview = ({
   const fetchPulseData = () => {
     // TanStack Query handles refetching automatically
   };
+
+  // Filter by selected PR when in modal mode
+  const poMasterData = useMemo(() => {
+    if (!initialPR) return rawMasterData;
+    const searchPr = String(initialPR).toLowerCase().trim();
+    return rawMasterData.filter(item =>
+      (item['Req Ref'] && String(item['Req Ref']).toLowerCase() === searchPr) ||
+      (item.Ref && String(item.Ref).toLowerCase() === searchPr) ||
+      (item.PR && String(item.PR).toLowerCase() === searchPr) ||
+      (item.pr && String(item.pr).toLowerCase() === searchPr) ||
+      (item.PR_No && String(item.PR_No).toLowerCase() === searchPr)
+    );
+  }, [rawMasterData, initialPR]);
 
   // --- ANALYTICS ENGINE (Current Values Only, No Comparison) ---
 
@@ -205,6 +218,19 @@ const Overview = ({
         <div className="flex flex-col items-center gap-1">
           <p className="text-[10px] font-black text-white uppercase tracking-[0.4em] animate-pulse">Syncing Operational Data</p>
           <span className="text-[9px] font-bold text-white/20 uppercase tracking-widest">Bridging po_data stream...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] gap-6">
+        <div className="flex flex-col items-center gap-2">
+          <ShieldCheck size={48} className="text-white/10" />
+          <p className="text-sm font-bold text-white/30 uppercase tracking-[0.3em]">
+            {initialPR ? `No records found for PR: ${initialPR}` : 'No data available'}
+          </p>
         </div>
       </div>
     );

@@ -362,7 +362,6 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
       {/* Row 1 KPI */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-5">
         <KPIStore title="Total PRs" value={stats?.totalPRs || 0} icon={IconClipboardList} color={COLORS.gold} loading={loading} />
-        <KPIStore title="Total Line Items" value={stats?.totalItems || 0} icon={IconListCheck} color="#3b82f6" loading={loading} />
         <KPIStore title="Items with Price Changes" value={stats?.itemsWithChanges || 0} icon={IconTrendingUp} color={COLORS.amber} loading={loading} />
         <KPIStore title="Items with Multiple Changes" value={stats?.itemsWithMultiple || 0} icon={IconRefresh} color="#a855f7" loading={loading} />
       </div>

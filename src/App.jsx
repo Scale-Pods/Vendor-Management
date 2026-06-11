@@ -26,7 +26,7 @@ import ReviewDashboard from './components/dashboard/ReviewDashboard';
 import QuoteRegister from './components/quotes/QuoteRegister';
 import Login from './components/auth/Login';
 import UserManagement from './components/admin/UserManagement';
-import Overview from './components/dashboard/Overview';
+import PRReviewDetail from './components/dashboard/PRReviewDetail';
 import ProcurementIntelligence from './components/dashboard/ProcurementIntelligence';
 
 const SIDEBAR_W = 260;
@@ -498,7 +498,7 @@ const App = () => {
             </div>
             
             <div className="flex-1 overflow-auto custom-scrollbar px-6 sm:px-12 py-10">
-              <Overview darkMode={true} initialPR={selectedPR} isModalMode={true} />
+              <PRReviewDetail pr={selectedPR} year={activeTab.replace('review', '')} />
             </div>
           </div>
         </div>
