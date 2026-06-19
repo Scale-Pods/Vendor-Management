@@ -14,7 +14,7 @@ const Login = ({ onLogin }) => {
 
     try {
       const params = new URLSearchParams({ action: 'validate', email, password });
-      const response = await fetch(`/api/n8n/webhook/fccc9ea9-d7ea-4dff-a95c-b9031990d5ff?${params}`);
+      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_USER_FETCH}?${params}`);
       const data = await response.json();
       console.log('Login response:', data);
 
@@ -35,7 +35,7 @@ const Login = ({ onLogin }) => {
         const uae = new Date(now.getTime() + (now.getTimezoneOffset() + uaeOffset) * 60000);
         const uaeStr = uae.toISOString().replace('Z', '').replace('T', ' ') + ' +04:00';
         const logParams = new URLSearchParams({ action: 'Time', email: user.email, time: uaeStr });
-        fetch(`/api/n8n/webhook/24a10bda-d61b-4355-b26e-594726a2ec93?${logParams}`).catch(() => {});
+        fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_USER_MUTATION}?${logParams}`).catch(() => {});
         onLogin({ email: user.email, role });
       } else {
         setError('Invalid credentials. Please try again.');

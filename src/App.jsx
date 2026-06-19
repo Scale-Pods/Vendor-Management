@@ -91,7 +91,7 @@ const App = () => {
     localStorage.setItem('scale_pods_session_time', String(Date.now()));
 
     // Start prefetch immediately so data is in cache before component mounts
-    const baseUrl = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978';
+    const baseUrl = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_MASTER_PO}`;
     queryClient.prefetchQuery({ queryKey: ['po-data-intel'], queryFn: async () => { const r = await fetch(`${baseUrl}?action=PO%20Data`); if (!r.ok) throw new Error('Failed'); const j = await r.json(); return flatItems(j); }, staleTime: 5 * 60 * 1000 });
   };
 

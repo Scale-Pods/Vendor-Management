@@ -10,7 +10,7 @@ import {
 
 const PAGE_SIZE = 10;
 
-const WEBHOOK_URL = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=quote';
+const WEBHOOK_URL = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_MASTER_PO}?action=quote`;
 
 const StatusBadge = memo(({ status }) => {
   const styles = {

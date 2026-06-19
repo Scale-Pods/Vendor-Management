@@ -7,8 +7,8 @@ import {
   IconEyeOff
 } from '@tabler/icons-react';
 
-const FETCH_USERS_URL = '/api/n8n/webhook/fccc9ea9-d7ea-4dff-a95c-b9031990d5ff';
-const MUTATION_URL = '/api/n8n/webhook/24a10bda-d61b-4355-b26e-594726a2ec93';
+const FETCH_USERS_URL = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_USER_FETCH}`;
+const MUTATION_URL = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_USER_MUTATION}`;
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);

@@ -18,7 +18,7 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
   const { data = [], isLoading: loading } = useQuery({
     queryKey: ['review-year', action],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=${action}`);
+      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_REVIEW_YEAR}?action=${action}`);
       if (!response.ok) throw new Error('Failed to fetch review data');
       const result = await response.json();
       const data = Array.isArray(result) ? result : (result.data || []);

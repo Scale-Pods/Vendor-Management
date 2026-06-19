@@ -12,7 +12,7 @@ const ROW_HEIGHT = 44;
 const HEADER_HEIGHT = 44;
 const ROW_NUM_WIDTH = 56;
 const DEFAULT_COL_WIDTH = 180;
-const UPDATE_WEBHOOK = '/api/n8n/webhook/03b33be3-19ea-494b-9ba2-36af60ccb752';
+const UPDATE_WEBHOOK = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_SHEETS_UPDATE}`;
 
 const TABLE_SCHEMAS = {
   'PO Data': ['sr_no', 'Ref', 'po_date', 'Approve / Reject', 'Status', 'Project', 'Company', 'Pending Approval', 'Supplier', 'PO Class', 'Entered By', 'Entered Time', 'Req Ref', 'qc_ref', 'Doc. Remarks', 'Terms & Conditions', 'Attachments', 'Approval History', 'Approval Config', 'Discount', 'Net Price', 'VAT', 'Total Price', 'Status_1', 'Original Pirce', 'Charges', 'Month', 'change_in_price_1', 'change_in_price_1_date', 'change_in_price_2', 'change_in_price_2_date', 'change_in_price_3', 'change_in_price_3_date', 'change_in_price_4', 'change_in_price_4_date', 'change_in_price_5', 'change_in_price_5_date', 'created_at'],

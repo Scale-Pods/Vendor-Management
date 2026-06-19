@@ -89,7 +89,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
 
       // 2. Fallback to n8n if Supabase is empty/not configured
       console.log('Supabase empty or missing, falling back to n8n...');
-      const n8nUrl = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO Data`;
+      const n8nUrl = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_MASTER_PO}?action=PO Data`;
       const response = await fetch(n8nUrl);
       const json = await response.json();
       
@@ -121,7 +121,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const { data: prCount2025 = 0 } = useQuery({
     queryKey: ['review-pr-count-2025'],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=25`);
+      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_REVIEW_YEAR}?action=25`);
       if (!response.ok) throw new Error('Failed to fetch 2025 data');
       const result = await response.json();
       const data = Array.isArray(result) ? result : (result.data || []);
@@ -133,7 +133,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const { data: prCount2026 = 0 } = useQuery({
     queryKey: ['review-pr-count-2026'],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/971719b0-cac4-4362-a99a-6b867f5f9d3e?action=26`);
+      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_REVIEW_YEAR}?action=26`);
       if (!response.ok) throw new Error('Failed to fetch 2026 data');
       const result = await response.json();
       const data = Array.isArray(result) ? result : (result.data || []);

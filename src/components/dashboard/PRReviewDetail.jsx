@@ -165,7 +165,7 @@ const PRReviewDetail = ({ pr, year }) => {
   const { data: prData = [], isLoading, error } = useQuery({
     queryKey: ['pr-review-detail', pr, year],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/a1f41232-c82d-4fba-97f6-9b2b0915a9e1?pr=${encodeURIComponent(pr)}&year=${encodeURIComponent(year)}`);
+      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_PR_DETAIL}?pr=${encodeURIComponent(pr)}&year=${encodeURIComponent(year)}`);
       if (!response.ok) throw new Error('Failed to fetch PR detail data');
       const json = await response.json();
       return normalizeWebhookData(json);

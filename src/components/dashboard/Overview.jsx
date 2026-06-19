@@ -80,7 +80,7 @@ const Overview = ({
   const { data: rawMasterData = [], isLoading: loading } = useQuery({
     queryKey: ['po-data'],
     queryFn: async () => {
-      const baseUrl = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978';
+      const baseUrl = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_MASTER_PO}`;
       const response = await fetch(`${baseUrl}?action=PO%20Data`);
       if (!response.ok) throw new Error('Failed to fetch PO data');
       const json = await response.json();

@@ -31,6 +31,7 @@ import {
 } from '@tabler/icons-react';
 import { BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import BoxLoader from '../ui/BoxLoader';
+import { supabase } from '../../lib/supabase';
 
 
 const PO_COLUMNS = [
@@ -103,9 +104,8 @@ const DETAIL_COLUMNS = [
 // Bypassing 18: PDF Rpt, 19: PDF Rpt No Appr.
 const STRIP_INDICES = new Set([18, 19]);
 
-const IMPORT_WEBHOOK = `/api/n8n/webhook/552d22ef-17fd-4dfd-b4d5-dfce6624c5f6`;
-const FETCH_WEBHOOK = `/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=PO%20Data`;
-const COMPARE_WEBHOOK = `/api/n8n/webhook/d0456a7b-66b8-4a06-a838-934451ee34dc`;
+const IMPORT_WEBHOOK = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_PO_IMPORT}`;
+const COMPARE_WEBHOOK = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_PO_COMPARE}`;
 
 const PAGE_SIZE = 50;
 
@@ -356,15 +356,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   const { data: logData = [], isLoading: logLoading } = useQuery({
     queryKey: ['po-log-data'],
     queryFn: async () => {
-      const response = await fetch(FETCH_WEBHOOK);
-      if (!response.ok) throw new Error('Failed to fetch PO log');
-      const json = await response.json();
-      let data = [];
-      if (Array.isArray(json)) {
-        data = json[0]?.data && Array.isArray(json[0].data) ? json[0].data : json;
-      } else if (json?.data && Array.isArray(json.data)) {
-        data = json.data;
-      }
+      const { data, error } = await supabase.rpc('get_pr_list');
+      if (error) throw new Error(error.message);
       return (data || []).map(row => {
         if (/AM|PM/i.test(row.Month) && row.po_date) {
           const match = row.po_date.match(/^[\d]+-([A-Za-z]+)/);
@@ -379,7 +372,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   const { data: poMasterData = [], isLoading: poMasterLoading } = useQuery({
     queryKey: ['po-master-data'],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978?action=merged`);
+      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_MASTER_PO}?action=merged`);
       if (!response.ok) throw new Error('Failed to fetch master data');
       const json = await response.json();
       let data = [];
@@ -466,22 +459,10 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     setPrError(prev => ({ ...prev, [ref]: null }));
 
     try {
-      const url = `/api/n8n/webhook/b47de351-0c89-466a-9098-29f0eaa590ae?pr=${encodeURIComponent(prRef)}`;
-      const response = await fetch(url);
+      const { data, error } = await supabase.rpc('get_pr_detail', { p_pr: prRef });
+      if (error) throw new Error(error.message);
 
-      if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
-      }
-
-      const text = await response.text();
-      let parsedJson;
-      try {
-        parsedJson = text ? JSON.parse(text) : { status: "Success", message: "Webhook executed successfully. No additional data payload returned." };
-      } catch {
-        parsedJson = { message: text || "Webhook executed successfully." };
-      }
-
-      setPrDetails(prev => ({ ...prev, [ref]: parsedJson }));
+      setPrDetails(prev => ({ ...prev, [ref]: data }));
     } catch (err) {
       console.error(`Failed to fetch PR details for ${prRef}:`, err);
       setPrError(prev => ({ ...prev, [ref]: err.message }));

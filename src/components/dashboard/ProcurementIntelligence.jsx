@@ -10,6 +10,7 @@ import {
   IconCoin, IconBuildingStore, IconChartBar,
   IconBriefcase, IconPackage, IconTrendingUp, IconUsers, IconActivity, IconArrowUpRight, IconArrowDownRight,
 } from '@tabler/icons-react';
+import { supabase } from '../../lib/supabase';
 
 const GOLD = '#c8922a';
 const GREEN = '#00c896';
@@ -98,241 +99,53 @@ const tooltipStyle = {
   color: '#fff',
 };
 
-const parseNum = (v) => {
-  if (v === null || v === undefined || v === '') return NaN;
-  const n = parseFloat(String(v).replace(/,/g, ''));
-  return isNaN(n) ? NaN : n;
-};
-
-const getLatestTotal = (item) => {
-  for (let i = 5; i >= 1; i--) {
-    const v = parseNum(item[`change${i}_total`]) || parseNum(item[`change_in_price_${i}`]) || parseNum(item[`change${i}_price`]) || parseNum(item[`change${i}_Total`]);
-    if (v) return v;
-  }
-  const keys = ['Total Price', 'Net Price', 'Original Pirce', 'Original Price', 'Total', 'total', 'Price', 'price', 'Amount', 'amount'];
-  for (const k of keys) {
-    const v = parseNum(item[k]);
-    if (v) return v;
-  }
-  return 0;
-};
-
-const getQty = (item) => {
-  return parseNum(item.Qty || item.qty || item.Req_Qty || item.req_qty || item['Req. Qty'] || item.quantity || 0) || 0;
-};
-
-const getRemainQty = (item) => {
-  return parseNum(item.RemainQty || item['Remain Qty'] || item['Remaining Qty'] || item.Remain_Qty || item.remain_qty || 0) || 0;
-};
-
-const getDescription = (item) => {
-  return item.Description || item.description || item.desc || item.material || item.Material || item.change1_description || item.Ref || '';
-};
-
-const getMonth = (item) => {
-  if (item.Month) return item.Month;
-  if (item['PO Date']) {
-    const d = new Date(item['PO Date']);
-    if (!isNaN(d.getTime())) {
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return months[d.getMonth()];
-    }
-  }
-  return null;
-};
-
-const flatItems = (json) => {
-  let raw = [];
-  if (Array.isArray(json)) {
-    if (json[0]?.data && Array.isArray(json[0].data)) raw = json[0].data;
-    else if (json[0] && Array.isArray(json[0])) raw = json[0];
-    else raw = json;
-  } else if (json?.data) {
-    raw = Array.isArray(json.data) ? json.data : [];
-  }
-  return raw.filter(item => item && typeof item === 'object' && !Array.isArray(item));
-};
-
-const fetchPOData = async () => {
-  const baseUrl = '/api/n8n/webhook/e7af6af6-25f1-4c46-96f7-61a57f9e0978';
-  const response = await fetch(`${baseUrl}?action=PO%20Data`);
-  if (!response.ok) throw new Error('Failed to fetch PO data');
-  const json = await response.json();
-  return flatItems(json);
-};
+const mapAnalytics = (data) => ({
+  totalSpend: data.total_spend ?? 0,
+  activePRs: data.active_prs ?? 0,
+  activeProjects: data.active_projects ?? 0,
+  activeSuppliers: data.active_suppliers ?? 0,
+  materialsTracked: 0,
+  avgPOValue: data.avg_po_value ?? 0,
+  topProjects: data.top_projects ?? [],
+  topSuppliers: data.top_suppliers ?? [],
+  recentActivity: data.recent_activity ?? [],
+  projectList: data.project_list ?? [],
+  supplierList: data.supplier_list ?? [],
+});
 
 const ProcurementIntelligence = () => {
   const [filters, setFilters] = useState({ project: '', supplier: '', search: '' });
 
-  const { data: rawData = [], isLoading: loading, error } = useQuery({
-    queryKey: ['po-data-intel'],
-    queryFn: fetchPOData,
+  const { data: analytics = null, isLoading: loading, error } = useQuery({
+    queryKey: ['po-analytics', filters.project, filters.supplier],
+    queryFn: async ({ queryKey }) => {
+      const [, project, supplier] = queryKey;
+      const { data, error } = await supabase.rpc('get_po_analytics', {
+        p_project: project || null,
+        p_supplier: supplier || null,
+      });
+      if (error) throw error;
+      return mapAnalytics(data);
+    },
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
 
-  const mappedData = useMemo(() => rawData.map(item => ({
-    ...item,
-    PR: item['Req Ref'] || item.Ref || 'N/A',
-    Project: ((item.Project || 'Unknown').toString().trim().startsWith('AMANA ') ? 'S' + (item.Project || 'Unknown').toString().trim() : (item.Project || 'Unknown').toString().trim()),
-    Supplier: item.Supplier || 'Unknown',
-    Description: item.Description || '',
-    Qty: parseNum(item.Qty || item['Req. Qty'] || 0),
-    RemainQty: parseNum(item['Remain Qty'] || item['Remaining Qty'] || 0),
-  })), [rawData]);
+  const projectList = analytics?.projectList ?? [];
+  const supplierList = analytics?.supplierList ?? [];
 
-  const filteredData = useMemo(() => {
-    return mappedData.filter(item => {
-      const q = filters.search.toLowerCase();
-      const mp = !filters.project || item.Project === filters.project;
-      const ms = !filters.supplier || item.Supplier === filters.supplier;
-      if (!q) return mp && ms;
-      return mp && ms && (
-        (item.PR && String(item.PR).toLowerCase().includes(q)) ||
-        (item.Project && String(item.Project).toLowerCase().includes(q)) ||
-        (item.Supplier && String(item.Supplier).toLowerCase().includes(q)) ||
-        (item.Description && String(item.Description).toLowerCase().includes(q))
-      );
-    });
-    }, [mappedData, filters]);
-
-  const analytics = useMemo(() => {
-    if (loading || !filteredData.length) return null;
-
-    const PRs = new Set();
-    const projects = new Set();
-    const suppliers = new Set();
-    const materials = new Set();
-    let totalSpend = 0;
-    let totalQty = 0;
-    let totalRemain = 0;
-    let fulfilledQty = 0;
-
-    const supplierMap = {};
-    const projectMap = {};
-    const materialMap = {};
-    const monthlyMap = {};
-    const statusCounts = { generated: 0, qc: 0, po_created: 0, pending: 0, awaiting: 0, completed: 0 };
-
-    filteredData.forEach(item => {
-      const pr = item.PR || item.PR_No || item['Req Ref'] || item.Ref;
-      if (pr) PRs.add(pr);
-      if (item.Project) projects.add(item.Project);
-      if (item.Supplier) suppliers.add(item.Supplier);
-
-      const desc = getDescription(item);
-      if (desc) materials.add(desc);
-
-      const spend = getLatestTotal(item);
-      totalSpend += spend;
-
-      const qty = getQty(item);
-      totalQty += qty;
-
-      const remain = getRemainQty(item);
-      totalRemain += remain;
-
-      if (qty > 0 && remain === 0) fulfilledQty += qty;
-
-      const sup = item.Supplier || 'Unknown';
-      if (!supplierMap[sup]) supplierMap[sup] = { spend: 0, orders: 0, projects: new Set() };
-      supplierMap[sup].spend += spend;
-      supplierMap[sup].orders++;
-      if (item.Project) supplierMap[sup].projects.add(item.Project);
-
-      const proj = item.Project || 'Unknown';
-      if (!projectMap[proj]) projectMap[proj] = { spend: 0, remain: 0, items: 0 };
-      projectMap[proj].spend += spend;
-      projectMap[proj].remain += remain;
-      projectMap[proj].items++;
-
-      if (desc) {
-        if (!materialMap[desc]) materialMap[desc] = { count: 0, totalQty: 0 };
-        materialMap[desc].count++;
-        materialMap[desc].totalQty += qty;
-      }
-
-      const month = getMonth(item);
-      if (month) {
-        if (!monthlyMap[month]) monthlyMap[month] = 0;
-        monthlyMap[month] += spend;
-      }
-
-      const st = (item.Status || '').toLowerCase();
-      if (st.includes('complete') || st.includes('approved')) statusCounts.completed++;
-      else if (st.includes('qc') || st.includes('quality')) statusCounts.qc++;
-      else if (st.includes('po') || st.includes('order')) statusCounts.po_created++;
-      else if (st.includes('pend') || st.includes('wait')) statusCounts.pending++;
-      else if (st.includes('supplier') || st.includes('await')) statusCounts.awaiting++;
-      else statusCounts.generated++;
-    });
-
-    const prCount = PRs.size;
-    const avgPO = prCount > 0 ? totalSpend / prCount : 0;
-    const efficiency = totalQty > 0 ? (fulfilledQty / totalQty) * 100 : 0;
-
-    const topMaterials = Object.entries(materialMap)
-      .map(([name, v]) => ({ name, count: v.count, totalQty: v.totalQty }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 15);
-
-    const topSuppliers = Object.entries(supplierMap)
-      .map(([name, v]) => ({ name, spend: v.spend, orders: v.orders, projects: v.projects.size, share: totalSpend > 0 ? (v.spend / totalSpend) * 100 : 0 }))
-      .sort((a, b) => b.spend - a.spend)
-      .slice(0, 10);
-
-    const topProjects = Object.entries(projectMap)
-      .map(([name, v]) => ({ name, spend: v.spend, share: totalSpend > 0 ? (v.spend / totalSpend) * 100 : 0, remain: v.remain }))
-      .sort((a, b) => b.spend - a.spend)
-      .slice(0, 10);
-
-    const riskProjects = Object.entries(projectMap)
-      .map(([name, v]) => ({ name, remain: v.remain, spend: v.spend, risk: v.remain > 0 ? Math.min(100, Math.round((v.remain / (totalRemain || 1)) * 100)) : 0 }))
-      .filter(p => p.remain > 0)
-      .sort((a, b) => b.remain - a.remain)
-      .slice(0, 10);
-
-    const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthlyTrend = monthOrder.map(m => ({
-      month: m,
-      spend: monthlyMap[m] || 0,
-    }));
-
-    const recentActivity = filteredData
-      .map(item => ({
-        pr: item.PR || item.PR_No || 'N/A',
-        project: item.Project || '—',
-        supplier: item.Supplier || '—',
-        material: getDescription(item) || '—',
-        qty: getQty(item),
-        value: getLatestTotal(item),
-        status: item.Status || 'Generated',
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 15);
-
-    return {
-      totalSpend,
-      activePRs: prCount,
-      activeProjects: projects.size,
-      activeSuppliers: suppliers.size,
-      pendingQty: totalRemain,
-      materialsTracked: materials.size,
-      avgPOValue: avgPO,
-      efficiency,
-      topSuppliers,
-      topProjects,
-      topMaterials,
-      riskProjects,
-      monthlyTrend,
-      recentActivity,
-      statusCounts,
-    };
-  }, [filteredData, loading]);
-
-  const projectList = useMemo(() => [...new Set(mappedData.map(i => i.Project))].filter(Boolean).sort(), [mappedData]);
-  const supplierList = useMemo(() => [...new Set(mappedData.map(i => i.Supplier))].filter(Boolean).sort(), [mappedData]);
+  const recentActivity = useMemo(() => {
+    if (!analytics?.recentActivity) return [];
+    const q = filters.search.toLowerCase();
+    if (!q) return analytics.recentActivity;
+    return analytics.recentActivity.filter(r =>
+      (r.pr && String(r.pr).toLowerCase().includes(q)) ||
+      (r.project && String(r.project).toLowerCase().includes(q)) ||
+      (r.supplier && String(r.supplier).toLowerCase().includes(q)) ||
+      (r.material && String(r.material).toLowerCase().includes(q))
+    );
+  }, [analytics?.recentActivity, filters.search]);
 
   if (error) {
     return (
@@ -486,7 +299,6 @@ const ProcurementIntelligence = () => {
 
 
 
-
       {/* ─── Section 6: Top Suppliers Leaderboard ─── */}
       <ChartCard title="Top Suppliers Leaderboard" subtitle="Supplier &bull; Total Spend &bull; Orders &bull; Projects &bull; Share %">
         <div className="overflow-x-auto">
@@ -539,7 +351,7 @@ const ProcurementIntelligence = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
-              {(analytics?.recentActivity || []).slice(0, 10).map((act, idx) => (
+              {(recentActivity || []).slice(0, 10).map((act, idx) => (
                 <tr key={idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors">
                   <td className="py-3 text-[12px] text-white font-bold">{act.pr}</td>
                   <td className="py-3 text-[12px] text-white/60">{act.project}</td>
