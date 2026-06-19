@@ -37,7 +37,7 @@ DECLARE
   po_rows        json;
   project_name   text;
 BEGIN
-  -- Get project name from po_data for context
+  -- Get  project name from po_data for context
   SELECT COALESCE(NULLIF(TRIM("Project"), ''), 'Unknown')
   INTO project_name
   FROM po_data
