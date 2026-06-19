@@ -357,7 +357,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     queryKey: ['po-log-data'],
     queryFn: async () => {
       const all = [];
-      const size = 3000;
+      const size = 1000;
       let start = 0;
       while (true) {
         const { data, error } = await adminSupabase
@@ -1506,35 +1506,6 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
   const filteredLog = useMemo(() => {
     let result = logData;
-
-    // Merge rows by PR
-    const prMap = {};
-    result.forEach(row => {
-      const pr = row['Req Ref'] || row.Req_Ref || 'Ungrouped';
-      if (!prMap[pr]) {
-        prMap[pr] = { ...row }; // copy first row
-        prMap[pr]._pos = [row.Ref]; // store original POs
-        prMap[pr]._netSum = parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
-        prMap[pr]._vatSum = parseFloat(String(row.VAT || '0').replace(/,/g, '')) || 0;
-        prMap[pr]._totalSum = parseFloat(String(row['Total Price'] || '0').replace(/,/g, '')) || 0;
-      } else {
-        if (row.Ref && !prMap[pr]._pos.includes(row.Ref)) prMap[pr]._pos.push(row.Ref);
-        prMap[pr]._netSum += parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
-        prMap[pr]._vatSum += parseFloat(String(row.VAT || '0').replace(/,/g, '')) || 0;
-        prMap[pr]._totalSum += parseFloat(String(row['Total Price'] || '0').replace(/,/g, '')) || 0;
-      }
-    });
-
-    result = Object.values(prMap).map(merged => {
-       const formatVal = (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-       merged._Ref = merged.Ref; // preserve original PO Ref before overwrite
-       merged.Ref = merged['Req Ref'] || merged.Req_Ref || 'Ungrouped'; // Card Title is the PR
-       merged['Net Price'] = formatVal(merged._netSum);
-       merged.VAT = formatVal(merged._vatSum);
-       merged['Total Price'] = formatVal(merged._totalSum);
-       merged._isMergedPR = true;
-       return merged;
-    });
 
     if (monthFilter !== 'All') {
       const mf = monthFilter.trim();
