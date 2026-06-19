@@ -31,7 +31,7 @@ import {
 } from '@tabler/icons-react';
 import { BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import BoxLoader from '../ui/BoxLoader';
-import { supabase } from '../../lib/supabase';
+import { adminSupabase } from '../../lib/supabase';
 
 
 const PO_COLUMNS = [
@@ -107,7 +107,7 @@ const STRIP_INDICES = new Set([18, 19]);
 const IMPORT_WEBHOOK = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_PO_IMPORT}`;
 const COMPARE_WEBHOOK = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_PO_COMPARE}`;
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 9;
 
 /* â”€â”€â”€ Toast Component â”€â”€â”€ */
 const Toast = ({ message, type, onClose }) => {
@@ -356,14 +356,30 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   const { data: logData = [], isLoading: logLoading } = useQuery({
     queryKey: ['po-log-data'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_pr_list');
-      if (error) throw new Error(error.message);
-      return (data || []).map(row => {
-        if (/AM|PM/i.test(row.Month) && row.po_date) {
-          const match = row.po_date.match(/^[\d]+-([A-Za-z]+)/);
-          if (match) row.Month = match[1];
-        }
-        return row;
+      const all = [];
+      const size = 3000;
+      let start = 0;
+      while (true) {
+        const { data, error } = await adminSupabase
+          .from('po_data')
+          .select('*')
+          .order('id')
+          .range(start, start + size - 1);
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < size) break;
+        start += size;
+      }
+      return all.map(row => {
+        const n = { ...row };
+        if (n.po_date && !n['PO Date']) n['PO Date'] = n.po_date;
+        if (n.qc_ref && !n['QC Ref.']) n['QC Ref.'] = n.qc_ref;
+        if (n['QC Ref'] && !n['QC Ref.']) n['QC Ref.'] = n['QC Ref'];
+        if (n['Approved / Reject'] && !n['Approve / Reject']) n['Approve / Reject'] = n['Approved / Reject'];
+        if (n.month && !n.Month) n.Month = String(n.month).trim();
+        if (n.Month) n.Month = String(n.Month).replace(/[\s\u00A0]+/g, ' ').trim();
+        return n;
       });
     },
     staleTime: 5 * 60 * 1000,
@@ -393,7 +409,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   const [spendPeriod, setSpendPeriod] = useState('Monthly');
   const [drillMonth, setDrillMonth] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
-  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useState(0);
   const [expandedCardRef, setExpandedCardRef] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
 
@@ -459,10 +475,25 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     setPrError(prev => ({ ...prev, [ref]: null }));
 
     try {
-      const { data, error } = await supabase.rpc('get_pr_detail', { p_pr: prRef });
-      if (error) throw new Error(error.message);
+      const [mat25, mat26, pd25, pd26, poTbl] = await Promise.all([
+        adminSupabase.from('material_detail_25').select('*').eq('PR', prRef),
+        adminSupabase.from('material_detail_26').select('*').eq('pr', prRef),
+        adminSupabase.from('pr_data_25').select('*').eq('PR', prRef),
+        adminSupabase.from('pr_data_26').select('*').eq('pr', prRef),
+        adminSupabase.from('purchase_orders').select('*').eq('PR', prRef),
+      ]);
+      const err = mat25.error || mat26.error || pd25.error || pd26.error || poTbl.error;
+      if (err) throw new Error(err.message);
 
-      setPrDetails(prev => ({ ...prev, [ref]: data }));
+      const allRows = [
+        ...(mat25.data || []),
+        ...(mat26.data || []),
+        ...(pd25.data || []),
+        ...(pd26.data || []),
+        ...(poTbl.data || []),
+      ];
+
+      setPrDetails(prev => ({ ...prev, [ref]: allRows.length ? allRows : { message: 'No detail data found for this PR.' } }));
     } catch (err) {
       console.error(`Failed to fetch PR details for ${prRef}:`, err);
       setPrError(prev => ({ ...prev, [ref]: err.message }));
@@ -1424,9 +1455,9 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   const uniqueMonths = useMemo(() => {
     const months = new Set();
     logData.forEach(row => {
-      if (!row.Month) return;
-      if (/AM|PM/i.test(row.Month)) return;
-      months.add(row.Month);
+      const m = row.Month ? String(row.Month).trim() : '';
+      if (!m) return;
+      months.add(m);
     });
     
     const monthMap = {
@@ -1506,7 +1537,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     });
 
     if (monthFilter !== 'All') {
-      result = result.filter(row => row.Month === monthFilter);
+      const mf = monthFilter.trim();
+      result = result.filter(row => (row.Month || '').trim() === mf);
     }
 
     if (enteredByFilter !== 'All') {
@@ -1850,10 +1882,12 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     }
   }, [rateDetailsMap]); // handleCompareWithExisting dependencies
 
-  // Dynamic visible log slicing for fast pagination rendering
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredLog.length / PAGE_SIZE)), [filteredLog.length]);
+
   const visibleLog = useMemo(() => {
-    return filteredLog.slice(0, displayCount);
-  }, [filteredLog, displayCount]);
+    const start = currentPage * PAGE_SIZE;
+    return filteredLog.slice(start, start + PAGE_SIZE);
+  }, [filteredLog, currentPage]);
 
 
   /* â”€â”€â”€ Scroll ref kept for container, no pagination needed â”€â”€â”€ */
@@ -3009,7 +3043,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               >
                 <select
                   value={monthFilter}
-                  onChange={(e) => { setMonthFilter(e.target.value); setDisplayCount(PAGE_SIZE); }}
+                  onChange={(e) => { setMonthFilter(e.target.value); setCurrentPage(0); }}
                   className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
                   style={{ minWidth: '80px' }}
                 >
@@ -3035,7 +3069,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               >
                 <select
                   value={enteredByFilter}
-                  onChange={(e) => { setEnteredByFilter(e.target.value); setDisplayCount(PAGE_SIZE); }}
+                  onChange={(e) => { setEnteredByFilter(e.target.value); setCurrentPage(0); }}
                   className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
                   style={{ minWidth: '100px' }}
                 >
@@ -3062,7 +3096,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               >
                 <select
                   value={statusFilter}
-                  onChange={(e) => { setStatusFilter(e.target.value); setDisplayCount(PAGE_SIZE); }}
+                  onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(0); }}
                   className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
                   style={{ minWidth: '120px' }}
                 >
@@ -3090,7 +3124,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                 <input
                   type="text"
                   value={logSearch}
-                  onChange={(e) => { setLogSearch(e.target.value); setDisplayCount(PAGE_SIZE); }}
+                  onChange={(e) => { setLogSearch(e.target.value); setCurrentPage(0); }}
                   placeholder="Search PR Number... (Ctrl+F)"
                   className="w-full bg-transparent text-[12px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.15)] outline-none"
                 />
@@ -3282,17 +3316,62 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                 })}
               </div>
 
-              {displayCount < filteredLog.length && (
-                <div className="flex flex-col items-center justify-center pt-8 pb-12">
-                  <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-semibold mb-3 tracking-wider uppercase">
-                    Showing {Math.min(displayCount, filteredLog.length)} of {filteredLog.length} PO Records
+              {totalPages > 1 && (
+                <div className="flex flex-col items-center justify-center pt-8 pb-12 gap-3">
+                  <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-semibold tracking-wider uppercase">
+                    Page {currentPage + 1} of {totalPages} &middot; {filteredLog.length} records
                   </p>
-                  <button
-                    onClick={() => setDisplayCount(prev => prev + 60)}
-                    className="px-8 py-3 bg-[rgba(245,158,11,0.08)] hover:bg-[#F59E0B] text-[#F59E0B] hover:text-black border border-[rgba(245,158,11,0.2)] hover:border-[#F59E0B] rounded-xl transition-all duration-300 font-bold text-xs uppercase tracking-widest shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center gap-2"
-                  >
-                    Load More Records
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                      disabled={currentPage === 0}
+                      className="px-4 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all disabled:opacity-30 disabled:pointer-events-none"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      Prev
+                    </button>
+
+                    {(() => {
+                      const pages = [];
+                      const maxVisible = 5;
+                      let start = Math.max(0, currentPage - Math.floor(maxVisible / 2));
+                      const end = Math.min(totalPages, start + maxVisible);
+                      if (end - start < maxVisible) start = Math.max(0, end - maxVisible);
+
+                      if (start > 0) pages.push(<span key="start" className="text-[rgba(255,255,255,0.2)] text-[11px] font-bold px-1">...</span>);
+
+                      for (let i = start; i < end; i++) {
+                        const isActive = i === currentPage;
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => setCurrentPage(i)}
+                            className={`w-9 h-9 rounded-xl text-[11px] font-bold transition-all ${
+                              isActive
+                                ? 'bg-[#F59E0B] text-black shadow-md'
+                                : 'text-[rgba(255,255,255,0.5)] hover:text-white hover:bg-[rgba(255,255,255,0.05)]'
+                            }`}
+                            style={isActive ? {} : { border: '1px solid rgba(255,255,255,0.06)' }}
+                          >
+                            {i + 1}
+                          </button>
+                        );
+                      }
+
+                      if (end < totalPages) pages.push(<span key="end" className="text-[rgba(255,255,255,0.2)] text-[11px] font-bold px-1">...</span>);
+
+                      return pages;
+                    })()}
+
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={currentPage >= totalPages - 1}
+                      className="px-4 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all disabled:opacity-30 disabled:pointer-events-none"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
