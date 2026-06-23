@@ -87,15 +87,15 @@ const InsightCard = ({ type, title, description, action, severity = 'info', inde
 
 const InsightsPanel = () => {
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 sm:space-y-10 px-3 sm:px-4 md:px-8 py-4 md:py-6">
       {/* Header */}
-      <div className="flex items-center gap-6 stagger-item">
-        <div className="w-16 h-16 bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] rounded-2xl flex items-center justify-center text-[#F59E0B]">
-          <Sparkles size={30} strokeWidth={1.5} />
+      <div className="flex items-center gap-4 sm:gap-6 stagger-item">
+        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] rounded-2xl flex items-center justify-center text-[#F59E0B] shrink-0">
+          <Sparkles size={24} strokeWidth={1.5} />
         </div>
         <div>
-          <h1 className="text-4xl font-bold text-white tracking-tight">AI Insights</h1>
-          <p className="text-[rgba(255,255,255,0.4)] font-medium mt-1">Automated anomaly detection and pattern recognition for your procurement cycle.</p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">AI Insights</h1>
+          <p className="text-[rgba(255,255,255,0.4)] font-medium mt-1 text-xs sm:text-base">Automated anomaly detection and pattern recognition for your procurement cycle.</p>
         </div>
       </div>
 
@@ -108,26 +108,26 @@ const InsightsPanel = () => {
       </div>
 
       {/* Hero CTA */}
-      <div className="relative glass-panel p-12 overflow-hidden stagger-item" style={{ animationDelay: '450ms' }}>
+      <div className="relative glass-panel p-6 sm:p-12 overflow-hidden stagger-item" style={{ animationDelay: '450ms' }}>
         {/* Ambient glows */}
-        <div className="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%)' }} />
-        <div className="absolute -bottom-32 left-1/3 w-[400px] h-[400px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%)' }} />
+        <div className="absolute -top-20 -right-20 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%)' }} />
+        <div className="absolute -bottom-32 left-1/3 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%)' }} />
 
         <div className="relative z-10 max-w-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] rounded-xl flex items-center justify-center text-[#F59E0B]">
-              <Award size={22} strokeWidth={1.5} />
+          <div className="flex items-center gap-3 mb-4 sm:mb-6">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] rounded-xl flex items-center justify-center text-[#F59E0B]">
+              <Award size={18} strokeWidth={1.5} />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[rgba(255,255,255,0.4)]">Quarterly Intelligence Report</span>
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.25em] text-[rgba(255,255,255,0.4)]">Quarterly Intelligence Report</span>
           </div>
-          <h2 className="text-5xl font-bold mb-5 tracking-tight text-white leading-tight">
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-5 tracking-tight text-white leading-tight">
             AED 24,500 in<br />
             <span className="text-[#F59E0B]">Identified Savings</span>
           </h2>
-          <p className="text-[rgba(255,255,255,0.5)] mb-10 text-[16px] leading-relaxed font-medium max-w-lg">
+          <p className="text-[rgba(255,255,255,0.5)] mb-6 sm:mb-10 text-sm sm:text-[16px] leading-relaxed font-medium max-w-lg">
             ProcureSync's AI engine identified consolidation and early-discount opportunities across your active procurement pipeline this quarter.
           </p>
-          <button className="px-10 py-4 bg-gradient-to-br from-[#F59E0B] to-[#D97706] text-black rounded-[14px] font-black text-[14px] hover:shadow-[0_8px_32px_rgba(245,158,11,0.5)] hover:-translate-y-1 active:scale-95 transition-all">
+          <button className="px-6 sm:px-10 py-3 sm:py-4 bg-gradient-to-br from-[#F59E0B] to-[#D97706] text-black rounded-[14px] font-black text-[12px] sm:text-[14px] hover:shadow-[0_8px_32px_rgba(245,158,11,0.5)] hover:-translate-y-1 active:scale-95 transition-all">
             DOWNLOAD FULL ANALYSIS
           </button>
         </div>

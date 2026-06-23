@@ -14,6 +14,14 @@ const queryClient = new QueryClient({
   },
 })
 
+function applyZoom() {
+  const vw = window.innerWidth;
+  document.documentElement.style.setProperty('--vw', String(vw));
+  document.documentElement.style.setProperty('--zoom', String(vw <= 800 ? 'high' : vw <= 1100 ? 'medium' : 'normal'));
+}
+applyZoom();
+window.addEventListener('resize', applyZoom);
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

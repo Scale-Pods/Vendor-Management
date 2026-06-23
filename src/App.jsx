@@ -29,7 +29,6 @@ import UserManagement from './components/admin/UserManagement';
 import PRReviewDetail from './components/dashboard/PRReviewDetail';
 import ProcurementIntelligence from './components/dashboard/ProcurementIntelligence';
 
-const SIDEBAR_W = 260;
 const SESSION_DURATION = 6 * 60 * 60 * 1000; // 6 hours
 
 const VALID_PAGES = new Set([
@@ -278,7 +277,7 @@ const App = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#06090F] relative overflow-hidden">
+    <div className="flex min-h-screen bg-[#06090F] relative overflow-x-hidden">
       {/* Ambient Blobs */}
       <div className="ambient-blob blob-1" />
       <div className="ambient-blob blob-2" />
@@ -286,17 +285,15 @@ const App = () => {
 
       {/* Sidebar */}
       <aside
-        style={{ width: `${SIDEBAR_W}px` }}
-        className="fixed inset-y-0 left-0 z-50 glass-panel !rounded-none border-r border-[rgba(255,255,255,0.08)] hidden md:flex flex-col"
+        className="fixed inset-y-0 left-0 z-50 glass-panel !rounded-none border-r border-[rgba(255,255,255,0.08)] hidden md:flex flex-col md:w-[200px] lg:w-[230px] xl:w-[260px]"
       >
         {/* Logo — ScalePods wordmark, untouched */}
-        <div className="px-6 pt-4 pb-4 flex items-center justify-center border-b border-[rgba(255,255,255,0.08)]">
+        <div className="px-3 lg:px-6 pt-4 pb-4 flex items-center justify-center border-b border-[rgba(255,255,255,0.08)]">
           <img
             src="/scalepods-logo.png"
             alt="ScalePods"
+            className="w-[140px] lg:w-[160px] xl:w-[180px] h-auto"
             style={{
-              width: '180px',
-              height: 'auto',
               display: 'block',
               filter: 'invert(1)',
               mixBlendMode: 'screen',
@@ -453,7 +450,7 @@ const App = () => {
       )}
 
       {/* Main Content */}
-      <main className="md:ml-[260px] flex-1 flex flex-col h-screen overflow-hidden relative z-10">
+      <main className="md:ml-[200px] lg:ml-[230px] xl:ml-[260px] flex-1 flex flex-col h-screen overflow-x-hidden relative z-10">
         {/* Topbar */}
         <header className="sticky top-0 z-30 glass-panel !rounded-none border-b border-[rgba(255,255,255,0.07)] px-4 sm:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">

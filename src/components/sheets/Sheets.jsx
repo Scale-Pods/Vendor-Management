@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
-  IconX, IconClock, IconLayoutColumns, IconList, IconTableExport, IconHash, IconDownload, IconSearch
+  IconX, IconClock, IconLayoutColumns, IconTableExport, IconHash, IconDownload, IconSearch
 } from '@tabler/icons-react';
 import BoxLoader from '../ui/BoxLoader';
 import MorphLoader from '../ui/MorphLoader';
@@ -66,7 +66,7 @@ const Sheets = ({ initialTab, onTabChange }) => {
     const el = scrollRef.current;
     if (!el || !hasNextPageRef.current || isFetchingNextPageRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = el;
-    if (scrollHeight - scrollTop - clientHeight < 5000) {
+    if (scrollHeight - scrollTop - clientHeight < 1500) {
       fetchNextPageRef.current?.();
     }
   }, []);
@@ -151,7 +151,7 @@ const Sheets = ({ initialTab, onTabChange }) => {
     count: displayData.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 10,
+    overscan: 12,
   });
 
   const virtualRows = rowVirtualizer.getVirtualItems();
@@ -328,29 +328,26 @@ const Sheets = ({ initialTab, onTabChange }) => {
   return (
     <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: '#06090F' }}>
 
-      <div className="flex items-center justify-between px-5 py-3 border-b shrink-0"
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between px-3 sm:px-5 py-3 sm:py-4 border-b shrink-0 gap-4"
         style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(13,17,23,0.85)' }}>
-
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-2">
+        
+        {/* Left Section: Info & Tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 lg:gap-6 min-w-0">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="p-2 rounded-lg" style={{ background: 'rgba(200,146,42,0.12)' }}>
-              <IconTableExport size={16} style={{ color: '#c8922a' }} />
+              <IconTableExport size={18} style={{ color: '#c8922a' }} />
             </div>
             <div>
-              <h2 className="text-white font-black text-sm tracking-tight">Table Inspector</h2>
-              <div className="flex items-center gap-2 mt-0.5" style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>
-                <span className="flex items-center gap-1 font-bold">
-                  <IconList size={10} /> {rawData.length.toLocaleString()} rows
-                </span>
-                <span style={{ opacity: 0.3 }}>·</span>
+              <h2 className="text-white font-black text-sm sm:text-base tracking-tight leading-none">Table Inspector</h2>
+              <div className="flex items-center gap-2 mt-1" style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>
                 <span className="flex items-center gap-1 font-bold">
                   <IconLayoutColumns size={10} /> {activeCols.length} columns
                 </span>
                 {displayData.length < rawData.length && (
                   <>
-                    <span style={{ opacity: 0.3 }}>·</span>
-                    <span className="flex items-center gap-1 font-bold" style={{ color: '#c8922a' }}>
-                      <IconSearch size={10} /> {displayData.length} filtered
+                    <span className="opacity-30">·</span>
+                    <span className="flex items-center gap-1 font-bold text-semantic-increase">
+                      <IconSearch size={10} /> {displayData.length.toLocaleString()} matches
                     </span>
                   </>
                 )}
@@ -358,23 +355,27 @@ const Sheets = ({ initialTab, onTabChange }) => {
             </div>
           </div>
 
-          <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.08)' }} />
+          <div className="hidden sm:block w-px h-6 bg-white/10 shrink-0" />
 
-          <div className="flex items-center gap-1 p-1 rounded-xl"
-            style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          {/* Optimized Tab Bar: Fixed/Wrapping logic */}
+          <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl"
+            style={{ 
+              background: 'rgba(0,0,0,0.4)', 
+              border: '1px solid rgba(255,255,255,0.05)',
+            }}>
             {TABS.map(tab => (
               <button
                 key={tab}
                 onClick={() => handleTabSwitch(tab)}
-                className="px-3 py-1.5 rounded-lg transition-all"
+                className="px-2.5 py-1.5 rounded-lg transition-all"
                 style={{
-                  fontSize: '10px',
+                  fontSize: '9px',
                   fontWeight: 900,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  color: activeTab === tab ? '#000' : 'rgba(255,255,255,0.3)',
+                  letterSpacing: '0.05em',
+                  color: activeTab === tab ? '#000' : 'rgba(255,255,255,0.4)',
                   background: activeTab === tab ? '#c8922a' : 'transparent',
-                  boxShadow: activeTab === tab ? '0 0 15px rgba(200,146,42,0.3)' : 'none',
+                  boxShadow: activeTab === tab ? '0 4px 12px rgba(200,146,42,0.25)' : 'none',
                 }}
               >
                 {tab.replace(/_/g, ' ')}
@@ -383,30 +384,32 @@ const Sheets = ({ initialTab, onTabChange }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+        {/* Right Section: Controls */}
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg flex-1 sm:flex-initial"
             style={{
               background: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.08)',
+              minWidth: '200px'
             }}>
-            <IconSearch size={12} style={{ color: 'rgba(255,255,255,0.3)' }} />
+            <IconSearch size={14} style={{ color: 'rgba(255,255,255,0.3)' }} />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search across all columns..."
+              placeholder="Search database..."
               style={{
                 background: 'transparent',
                 border: 'none',
                 outline: 'none',
-                color: 'rgba(255,255,255,0.8)',
+                color: 'white',
                 fontSize: '11px',
                 fontWeight: 600,
-                width: 160,
+                width: '100%',
               }}
             />
             {searchTerm && (
-              <button onClick={() => setSearchTerm('')} style={{ padding: 2, color: 'rgba(255,255,255,0.3)' }}>
+              <button onClick={() => setSearchTerm('')} className="p-0.5 text-white/30 hover:text-white transition-colors">
                 <IconX size={12} />
               </button>
             )}
@@ -416,126 +419,78 @@ const Sheets = ({ initialTab, onTabChange }) => {
             onClick={() => setShowAdvanced(v => !v)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
             style={{
-              fontSize: '9px',
+              fontSize: '10px',
               fontWeight: 900,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               background: showAdvanced ? 'rgba(200,146,42,0.1)' : 'rgba(255,255,255,0.03)',
-              color: showAdvanced ? '#c8922a' : 'rgba(255,255,255,0.3)',
+              color: showAdvanced ? '#c8922a' : 'rgba(255,255,255,0.4)',
               border: `1px solid ${showAdvanced ? 'rgba(200,146,42,0.25)' : 'rgba(255,255,255,0.08)'}`,
             }}
           >
-            ADVANCED SEARCH
+            FILTERS
           </button>
 
-          <button
-            onClick={() => {
-              if (loadingAllData) return;
-              if (searchTerm && displayData.length < rawData.length) {
-                setShowDownloadDialog(true);
-              } else {
-                downloadXLSX(rawData, `${activeTab.replace(/_/g, '_')}.xlsx`);
-              }
-            }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
-            style={{
-              fontSize: '10px',
-              fontWeight: 900,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              background: loadingAllData ? 'rgba(255,255,255,0.03)' : 'rgba(0,200,100,0.1)',
-              color: loadingAllData ? 'rgba(255,255,255,0.2)' : '#00c864',
-              border: `1px solid ${loadingAllData ? 'rgba(255,255,255,0.06)' : 'rgba(0,200,100,0.25)'}`,
-              cursor: loadingAllData ? 'not-allowed' : 'pointer',
-            }}
-            title={loadingAllData ? 'Loading all data — please wait...' : `Download ${activeTab.replace(/_/g, ' ')} as Excel`}
-          >
-            <IconDownload size={13} />
-            DOWNLOAD EXCEL
-          </button>
-
-          <button
-            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
-            style={{
-              fontSize: '10px',
-              fontWeight: 900,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              background: sortOrder === 'desc' ? '#c8922a' : 'rgba(200,146,42,0.1)',
-              color: sortOrder === 'desc' ? '#000' : '#c8922a',
-              border: `1px solid ${sortOrder === 'desc' ? '#c8922a' : 'rgba(200,146,42,0.25)'}`,
-            }}
-          >
-            <IconClock size={13} />
-            {sortOrder === 'asc' ? 'OLDEST FIRST' : 'LATEST FIRST'}
-          </button>
+          <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+            <button
+              onClick={() => {
+                if (loadingAllData) return;
+                if (searchTerm && displayData.length < rawData.length) {
+                  setShowDownloadDialog(true);
+                } else {
+                  downloadXLSX(rawData, `${activeTab.replace(/_/g, '_')}.xlsx`);
+                }
+              }}
+              className="p-1.5 rounded-lg text-semantic-increase hover:bg-semantic-increase/10 transition-colors"
+              title={loadingAllData ? 'Loading...' : 'Download Excel'}
+            >
+              <IconDownload size={18} />
+            </button>
+            <div className="w-px h-4 bg-white/10" />
+            <button
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className={`p-1.5 rounded-lg transition-colors ${sortOrder === 'desc' ? 'text-[#F59E0B] bg-[#F59E0B]/10' : 'text-white/40 hover:text-white'}`}
+              title={sortOrder === 'asc' ? 'Oldest First' : 'Latest First'}
+            >
+              <IconClock size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
       {showAdvanced && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 0 4px', margin: '0 16px',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-        }}>
-          <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>
-            Advanced Filters
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-white/5 bg-black/20">
+          <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] w-full sm:w-auto">
+            Advanced Filters:
           </span>
 
-          {supplierCol && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-              style={{
-                background: columnFilters[supplierCol] ? 'rgba(200,146,42,0.08)' : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${columnFilters[supplierCol] ? 'rgba(200,146,42,0.25)' : 'rgba(255,255,255,0.08)'}`,
-              }}>
-              <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-                Supplier
-              </span>
-              <input
-                type="text"
-                value={columnFilters[supplierCol] || ''}
-                onChange={(e) => setColumnFilters(prev => ({ ...prev, [supplierCol]: e.target.value }))}
-                placeholder="Type to filter..."
-                style={{
-                  background: 'transparent', border: 'none', outline: 'none',
-                  color: 'rgba(255,255,255,0.8)', fontSize: '11px', fontWeight: 600, width: 120,
-                }}
-              />
-              {columnFilters[supplierCol] && (
-                <button onClick={() => setColumnFilters(prev => { const n = { ...prev }; delete n[supplierCol]; return n; })} style={{ padding: 2, color: 'rgba(255,255,255,0.3)' }}>
-                  <IconX size={12} />
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex gap-3 flex-1 overflow-x-auto scrollbar-none">
+            {supplierCol && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 min-w-[160px]">
+                <span className="text-[9px] font-bold text-white/40 uppercase whitespace-nowrap">Supplier:</span>
+                <input
+                  type="text"
+                  value={columnFilters[supplierCol] || ''}
+                  onChange={(e) => setColumnFilters(prev => ({ ...prev, [supplierCol]: e.target.value }))}
+                  placeholder="Filter..."
+                  className="bg-transparent border-none outline-none text-white text-[11px] font-medium w-full"
+                />
+              </div>
+            )}
 
-          {projectCol && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-              style={{
-                background: columnFilters[projectCol] ? 'rgba(200,146,42,0.08)' : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${columnFilters[projectCol] ? 'rgba(200,146,42,0.25)' : 'rgba(255,255,255,0.08)'}`,
-              }}>
-              <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-                Project
-              </span>
-              <input
-                type="text"
-                value={columnFilters[projectCol] || ''}
-                onChange={(e) => setColumnFilters(prev => ({ ...prev, [projectCol]: e.target.value }))}
-                placeholder="Type to filter..."
-                style={{
-                  background: 'transparent', border: 'none', outline: 'none',
-                  color: 'rgba(255,255,255,0.8)', fontSize: '11px', fontWeight: 600, width: 120,
-                }}
-              />
-              {columnFilters[projectCol] && (
-                <button onClick={() => setColumnFilters(prev => { const n = { ...prev }; delete n[projectCol]; return n; })} style={{ padding: 2, color: 'rgba(255,255,255,0.3)' }}>
-                  <IconX size={12} />
-                </button>
-              )}
-            </div>
-          )}
+            {projectCol && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 min-w-[160px]">
+                <span className="text-[9px] font-bold text-white/40 uppercase whitespace-nowrap">Project:</span>
+                <input
+                  type="text"
+                  value={columnFilters[projectCol] || ''}
+                  onChange={(e) => setColumnFilters(prev => ({ ...prev, [projectCol]: e.target.value }))}
+                  placeholder="Filter..."
+                  className="bg-transparent border-none outline-none text-white text-[11px] font-medium w-full"
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -555,6 +510,18 @@ const Sheets = ({ initialTab, onTabChange }) => {
           </div>
         ) : (
           <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            {/* Horizontal Scroll Shadow Indicator */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 50,
+              background: 'linear-gradient(to left, rgba(6,9,15,1), transparent)',
+              zIndex: 100,
+              pointerEvents: 'none',
+              opacity: 0.8
+            }} />
             <div
               ref={scrollRef}
               onScroll={handleScroll}

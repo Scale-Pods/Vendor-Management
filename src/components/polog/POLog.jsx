@@ -147,7 +147,7 @@ const POLogCard = ({ row }) => {
   const hasOriginalPrice = row['Original Pirce'] || row['Original Price'];
 
   return (
-    <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6 space-y-4 hover:border-[#F59E0B] hover:shadow-[0_0_15px_rgba(245,158,11,0.08)] transition-all duration-300">
+    <div className="bg-[#121824] border-card rounded-2xl p-6 space-y-4 hover:border-[#F59E0B] hover:shadow-[0_0_15px_rgba(245,158,11,0.08)] transition-all duration-300">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h5 className="text-base font-black text-[#F59E0B] tracking-tight uppercase">
@@ -197,19 +197,19 @@ const POLogCard = ({ row }) => {
         </span>
       </div>
 
-      {/* Footer: Net Price Â· VAT Â· Total Price */}
-      <div className="grid grid-cols-3 gap-2.5 pt-2">
-        <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl p-2 text-center text-[#F59E0B]">
+      {/* Footer: Net Price · VAT · Total Price */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 pt-2">
+        <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl p-2 flex sm:flex-col justify-between sm:justify-center items-center text-[#F59E0B]">
           <p className="text-[8px] font-extrabold uppercase opacity-60">Net</p>
-          <p className="text-[11px] font-black mt-0.5">{row['Net Price'] || '0.00'}</p>
+          <p className="text-[11px] font-black">{row['Net Price'] || '0.00'}</p>
         </div>
-        <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl p-2 text-center text-[#F59E0B]">
+        <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl p-2 flex sm:flex-col justify-between sm:justify-center items-center text-[#F59E0B]">
           <p className="text-[8px] font-extrabold uppercase opacity-60">VAT</p>
-          <p className="text-[11px] font-black mt-0.5">{row.VAT || '0.00'}</p>
+          <p className="text-[11px] font-black">{row.VAT || '0.00'}</p>
         </div>
-        <div className="bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)] rounded-xl p-2 text-center text-[#F59E0B] shadow-inner">
+        <div className="bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.25)] rounded-xl p-2 flex sm:flex-col justify-between sm:justify-center items-center text-[#F59E0B] shadow-inner">
           <p className="text-[8px] font-extrabold uppercase opacity-80">Total</p>
-          <p className="text-[11px] font-black mt-0.5">{row['Total Price'] || '0.00'}</p>
+          <p className="text-[11px] font-black">{row['Total Price'] || '0.00'}</p>
         </div>
       </div>
 
@@ -236,7 +236,7 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
   const supplier = versions.length > 0 ? versions[versions.length - 1].supplier : 'N/A';
 
   return (
-    <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6 space-y-4 hover:border-[#F59E0B] transition-all duration-300">
+    <div className="bg-[#121824] border-card rounded-2xl p-6 space-y-4 hover:border-[#F59E0B] transition-all duration-300">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h5 className="text-base font-black text-[#F59E0B] tracking-tight uppercase">
@@ -248,17 +248,17 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
       </div>
 
       {/* Row 1: Project & Supplier */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase">Project</p>
+          <p className="text-[9px] sm:text-[10px] font-bold text-label uppercase">Project</p>
           <div className="flex items-center gap-1.5 text-white font-bold text-sm mt-0.5 truncate" title={project}>
             <IconBriefcase size={14} className="text-[rgba(255,255,255,0.4)] shrink-0" />
             <span className="truncate">{project}</span>
           </div>
         </div>
-        <div className="flex-1 text-right min-w-0">
-          <p className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase">Supplier</p>
-          <div className="flex items-center justify-end gap-1.5 text-[#F59E0B] font-semibold text-[11px] mt-0.5 truncate" title={supplier}>
+        <div className="flex-1 sm:text-right min-w-0">
+          <p className="text-[9px] sm:text-[10px] font-bold text-label uppercase">Supplier</p>
+          <div className="flex items-center sm:justify-end gap-1.5 text-[#F59E0B] font-semibold text-[11px] mt-0.5 truncate" title={supplier}>
             <IconBuildingStore size={12} className="shrink-0" />
             <span className="truncate max-w-[140px]">{supplier}</span>
           </div>
@@ -267,7 +267,7 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
 
       {/* Row 2: Description */}
       <div>
-        <p className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase mb-1">Description</p>
+        <p className="text-[10px] font-bold text-label uppercase mb-1">Description</p>
         <p 
           onClick={() => setIsDescExpanded(!isDescExpanded)} 
           className={`text-xs text-[rgba(255,255,255,0.7)] font-medium leading-relaxed cursor-pointer select-none ${
@@ -284,7 +284,7 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
         <div className="overflow-x-auto border border-[rgba(255,255,255,0.05)] rounded-xl bg-[#090e17]">
           <table className="w-full text-left border-collapse text-[11px]">
             <thead>
-              <tr className="bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.05)] text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">
+              <tr className="bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.05)] text-[10px] font-bold text-label uppercase tracking-wider">
                 <th className="px-4 py-2.5">Version</th>
                 <th className="px-4 py-2.5">Qty</th>
                 <th className="px-4 py-2.5">Rate</th>
@@ -692,7 +692,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         <p className="text-[10px] text-white font-bold">
           Detected: <span className="text-[#F59E0B]">{logsCount} PO Log</span> &middot; <span className="text-[#F59E0B]">{ordersCount} Material Items</span>
         </p>
-        <p className="text-[9px] text-[rgba(255,255,255,0.3)] font-bold italic pt-1">
+        <p className="text-[9px] text-label font-bold italic pt-1">
           Click 'VIEW FULL REPORT' to open deep comparison view
         </p>
       </div>
@@ -700,10 +700,10 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   };
 
   const renderWebhookDataFull = (data) => {
-    if (!data) return <p className="text-xs text-[rgba(255,255,255,0.3)]">No details returned.</p>;
+    if (!data) return <p className="text-xs text-label">No details returned.</p>;
 
     const rawItems = normalizeData(data);
-    if (rawItems.length === 0) return <p className="text-xs text-[rgba(255,255,255,0.3)]">Empty dataset.</p>;
+    if (rawItems.length === 0) return <p className="text-xs text-label">Empty dataset.</p>;
 
     const poLogs = [];
     const purchaseOrders = [];
@@ -754,13 +754,13 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         {/* Section 1: PO Log Entries */}
         {poLogs.length > 0 && (
           <div className="space-y-6 animate-slide-down">
-            <h5 className="text-[11px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-[0.2em] border-b border-[rgba(255,255,255,0.05)] pb-2 flex items-center gap-2">
+            <h5 className="text-[11px] font-black text-label uppercase tracking-[0.2em] border-b border-[rgba(255,255,255,0.05)] pb-2 flex items-center gap-2">
               <IconFileCertificate size={14} className="text-[#F59E0B]" /> PO Log Entries ({poLogs.length})
             </h5>
             <div className="space-y-6">
               {Object.entries(poLogsGrouped).map(([prNumber, groupItems]) => (
                 <div key={prNumber} className="border border-[rgba(255,255,255,0.03)] bg-[rgba(255,255,255,0.01)] rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.04)] pb-2.5">
+                  <div className="flex items-center justify-between border-b border-card/40 pb-2.5">
                     <span className="text-xs font-black text-[#F59E0B] uppercase tracking-wider">Group: {prNumber}</span>
                     <span className="text-[9px] px-2 py-0.5 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.4)] rounded font-bold uppercase tracking-tighter">
                       {groupItems.length} {groupItems.length === 1 ? 'Entry' : 'Entries'}
@@ -780,13 +780,13 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         {/* Section 2: Material Items */}
         {purchaseOrders.length > 0 && (
           <div className="space-y-6 animate-slide-down">
-            <h5 className="text-[11px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-[0.2em] border-b border-[rgba(255,255,255,0.05)] pb-2 flex items-center gap-2">
+            <h5 className="text-[11px] font-black text-label uppercase tracking-[0.2em] border-b border-[rgba(255,255,255,0.05)] pb-2 flex items-center gap-2">
               <IconBriefcase size={14} className="text-[#F59E0B]" /> PR List ({purchaseOrders.length})
             </h5>
             <div className="space-y-6">
               {Object.entries(purchaseOrdersGrouped).map(([prNumber, groupItems]) => (
                 <div key={prNumber} className="border border-[rgba(255,255,255,0.03)] bg-[rgba(255,255,255,0.01)] rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.04)] pb-2.5">
+                  <div className="flex items-center justify-between border-b border-card/40 pb-2.5">
                     <span className="text-xs font-black text-[#F59E0B] uppercase tracking-wider">Group: {prNumber}</span>
                     <span className="text-[9px] px-2 py-0.5 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.4)] rounded font-bold uppercase tracking-tighter">
                       {groupItems.length} {groupItems.length === 1 ? 'Item' : 'Items'}
@@ -825,7 +825,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     strip: 'rgba(255,255,255,0.015)',
   };
 
-  /* â”€â”€â”€ Paste parsing â”€â”€â”€ */
+  /* ——— Paste parsing ——— */
   const handlePaste = (e) => {
     const clipboardData = e.clipboardData || window.clipboardData;
     const pasted = clipboardData.getData('text');
@@ -936,7 +936,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       const tabCount = lines.filter(l => l.includes('\t')).length;
       const delimiter = pipeCount >= tabCount ? '|' : '\t';
 
-      // PR reference pattern â€” e.g. PR-04776 or PR04776
+      // PR reference pattern — e.g. PR-04776 or PR04776
       const prPattern = /\bPR[-\s]?\d{3,7}\b/i;
 
       for (const line of lines) {
@@ -1244,7 +1244,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     setMaterialDetailRows([]);
   };
 
-  /* â”€â”€â”€ Inline editing â”€â”€â”€ */
+  /* ——— Inline editing ——— */
   const handleCellEdit = (rowIdx, colName, value) => {
     setParsedRows((prev) => {
       const next = [...prev];
@@ -1296,7 +1296,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     };
   }, [showVerifyDialog]);
 
-  /* â”€â”€â”€ Import to webhook â”€â”€â”€ */
+  /* ——— Import to webhook ——— */
   const handleImport = async () => {
     if (parsedRows.length === 0) return;
     setShowVerifyDialog(false);
@@ -1861,9 +1861,9 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   }, [filteredLog, currentPage]);
 
 
-  /* â”€â”€â”€ Scroll ref kept for container, no pagination needed â”€â”€â”€ */
+  /* ——— Scroll ref kept for container, no pagination needed ——— */
 
-  /* â”€â”€â”€ Keyboard shortcut: Ctrl+F â”€â”€â”€ */
+  /* ——— Keyboard shortcut: Ctrl+F ——— */
   const searchInputRef = useRef(null);
   useEffect(() => {
     const handler = (e) => {
@@ -1955,7 +1955,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                   <div className="flex items-center gap-2">
                     <IconClipboardData size={14} className="text-[rgba(255,255,255,0.15)]" />
                     <span className="text-[11px] text-[rgba(255,255,255,0.2)] font-medium">
-                      Waiting for dataâ€¦
+                      Waiting for data…
                     </span>
                   </div>
                 )}
@@ -1981,14 +1981,14 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         </div>
         )}
 
-        {/* â•â•â•â•â•â•â•â•â•â•â• STEP 2 & PREVIEW TABLE â•â•â•â•â•â•â•â•â•â•â• */}
+        {/* ——— STEP 2 & PREVIEW TABLE ——— */}
         {parsedRows.length > 0 && (
           <div className="stagger-item" style={{ animationDelay: '100ms' }}>
             <div className="flex items-center gap-3 mb-3">
               <IconTableImport size={18} className="text-[#F59E0B]" />
               <h3 className="text-[13px] font-black text-white uppercase tracking-wider">Preview ({parsedRows.length} Rows)</h3>
               <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-bold ml-1">
-                â€” Edit cells below before importing
+                — Edit cells below before importing
               </span>
             </div>
             <div
@@ -2308,7 +2308,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                       Material Preview ({materialRows.length} Rows)
                     </h3>
                     <span className="text-[10px] text-[#10B981] font-bold ml-1">
-                      â€” {materialRows.length} material records detected
+                      — {materialRows.length} material records detected
                     </span>
                   </div>
 
@@ -2729,14 +2729,14 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             </div>
           </div>
         )}
-        {/* â•â•â•â•â•â•â•â•â•â•â• DASHBOARD OVERVIEW â•â•â•â•â•â•â•â•â•â•â• */}
+        {/* ——— DASHBOARD OVERVIEW ——— */}
         {dashboardStats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 stagger-item" style={{ animationDelay: '0ms' }}>
           <div className="bg-[#121824] border border-[rgba(255,255,255,0.06)] p-6 rounded-3xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
               <IconWallet size={64} className="text-[#F59E0B]" />
             </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Managed Spend</p>
+            <p className="text-[10px] font-black text-label uppercase tracking-wider mb-2">Total Managed Spend</p>
             <h4 className="text-3xl font-black text-white">{formatLargeCurrency(dashboardStats.totalSpend)}</h4>
             <div className="flex items-center gap-1.5 mt-4 text-[#10B981]">
               <IconArrowUpRight size={14} stroke={3} />
@@ -2748,7 +2748,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
               <IconReceipt2 size={64} className="text-[#F59E0B]" />
             </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Purchase Requests</p>
+            <p className="text-[10px] font-black text-label uppercase tracking-wider mb-2">Purchase Requests</p>
             <h4 className="text-3xl font-black text-white">{dashboardStats.uniquePRs}</h4>
             <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Total PRs currently tracked</p>
           </div>
@@ -2757,7 +2757,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
               <IconPackage size={64} className="text-[#F59E0B]" />
             </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Active Suppliers</p>
+            <p className="text-[10px] font-black text-label uppercase tracking-wider mb-2">Active Suppliers</p>
             <h4 className="text-3xl font-black text-white">{dashboardStats.uniqueSuppliers}</h4>
             <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Trusted vendor network size</p>
           </div>
@@ -2766,7 +2766,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
               <IconClipboardData size={64} className="text-[#F59E0B]" />
             </div>
-            <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-2">Total Line Items</p>
+            <p className="text-[10px] font-black text-label uppercase tracking-wider mb-2">Total Line Items</p>
             <h4 className="text-3xl font-black text-white">{dashboardStats.totalItems?.toLocaleString()}</h4>
             <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium mt-4">Items across all projects</p>
           </div>
@@ -2787,7 +2787,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                     <IconChevronLeft size={14} /> Back
                   </button>
                 ) : null}
-                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">
+                <p className="text-[10px] font-black text-label uppercase tracking-wider">
                   {drillMonth
                     ? new Date(drillMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })
                     : 'Spend Breakdown'}
@@ -2879,7 +2879,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-1.5 h-6 rounded-full bg-[#10B981]" />
-                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project Wise Money Invested</p>
+                <p className="text-[10px] font-black text-label uppercase tracking-wider">Project Wise Money Invested</p>
               </div>
               <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
                 {poMasterData.length} line items
@@ -2943,7 +2943,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-1.5 h-6 rounded-full bg-[#F59E0B]" />
-                <p className="text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Materials Maximum Time Purchased</p>
+                <p className="text-[10px] font-black text-label uppercase tracking-wider">Materials Maximum Time Purchased</p>
               </div>
               <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
                 Top {Math.min(topMaterials.length, 10)} of {poMasterData.length} items
@@ -3004,103 +3004,89 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               )}
             </div>
 
-            <div className="flex items-center gap-4 flex-wrap">
-              <div
-                className="relative flex items-center px-3 py-2 rounded-lg"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <select
-                  value={monthFilter}
-                  onChange={(e) => { setMonthFilter(e.target.value); setCurrentPage(0); }}
-                  className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
-                  style={{ minWidth: '80px' }}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 w-full">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 flex-1">
+                <div
+                  className="relative flex items-center px-3 py-2 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] flex-1 sm:flex-none"
                 >
-                  <option value="All" className="bg-[#0f1520] text-white">All Months</option>
-                  {uniqueMonths.map(m => (
-                    <option key={m} value={m} className="bg-[#0f1520] text-white">{m}</option>
-                  ))}
-                </select>
-                <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  <select
+                    value={monthFilter}
+                    onChange={(e) => { setMonthFilter(e.target.value); setCurrentPage(0); }}
+                    className="bg-transparent text-[11px] sm:text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-6 w-full"
+                    style={{ minWidth: '70px' }}
+                  >
+                    <option value="All" className="bg-[#0f1520] text-white">All Months</option>
+                    {uniqueMonths.map(m => (
+                      <option key={m} value={m} className="bg-[#0f1520] text-white">{m}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
                 </div>
+
+                {uniqueEnteredBy.length > 0 && (
+                <div
+                  className="relative flex items-center px-3 py-2 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] flex-1 sm:flex-none"
+                >
+                  <select
+                    value={enteredByFilter}
+                    onChange={(e) => { setEnteredByFilter(e.target.value); setCurrentPage(0); }}
+                    className="bg-transparent text-[11px] sm:text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-6 w-full"
+                    style={{ minWidth: '90px' }}
+                  >
+                    <option value="All" className="bg-[#0f1520] text-white">All Users</option>
+                    {uniqueEnteredBy.map(name => (
+                      <option key={name} value={name} className="bg-[#0f1520] text-white">{name}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                </div>
+                )}
+
+                {uniqueStatuses.length > 0 && (
+                <div
+                  className="relative flex items-center px-3 py-2 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] flex-1 sm:flex-none"
+                >
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(0); }}
+                    className="bg-transparent text-[11px] sm:text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-6 w-full"
+                    style={{ minWidth: '100px' }}
+                  >
+                    <option value="All" className="bg-[#0f1520] text-white">All Status</option>
+                    {uniqueStatuses.map(st => (
+                      <option key={st} value={st} className="bg-[#0f1520] text-white">{st}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                </div>
+                )}
               </div>
 
-              {uniqueEnteredBy.length > 0 && (
               <div
-                className="relative flex items-center px-3 py-2 rounded-lg"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <select
-                  value={enteredByFilter}
-                  onChange={(e) => { setEnteredByFilter(e.target.value); setCurrentPage(0); }}
-                  className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
-                  style={{ minWidth: '100px' }}
-                >
-                  <option value="All" className="bg-[#0f1520] text-white">All Entered By</option>
-                  {uniqueEnteredBy.map(name => (
-                    <option key={name} value={name} className="bg-[#0f1520] text-white">{name}</option>
-                  ))}
-                </select>
-                <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-              </div>
-              )}
-
-              {uniqueStatuses.length > 0 && (
-              <div
-                className="relative flex items-center px-3 py-2 rounded-lg"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <select
-                  value={statusFilter}
-                  onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(0); }}
-                  className="bg-transparent text-[12px] font-bold text-[#F59E0B] outline-none cursor-pointer appearance-none pr-4"
-                  style={{ minWidth: '120px' }}
-                >
-                  <option value="All" className="bg-[#0f1520] text-white">All Statuses</option>
-                  {uniqueStatuses.map(st => (
-                    <option key={st} value={st} className="bg-[#0f1520] text-white">{st}</option>
-                  ))}
-                </select>
-                <div className="absolute right-3 pointer-events-none text-[rgba(255,255,255,0.4)]">
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-              </div>
-              )}
-
-              <div
-                className="relative flex items-center gap-2 px-3 py-2 rounded-lg w-full sm:w-auto sm:min-w-[200px] lg:w-[280px]"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
+                className="relative flex items-center gap-2 px-3 py-2 rounded-lg w-full lg:w-[320px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]"
               >
                 <IconSearch size={14} className="text-[rgba(255,255,255,0.2)] shrink-0" />
                 <input
                   type="text"
                   value={logSearch}
                   onChange={(e) => { setLogSearch(e.target.value); setCurrentPage(0); }}
-                  placeholder="Search PR Number... (Ctrl+F)"
-                  className="w-full bg-transparent text-[12px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.15)] outline-none"
+                  placeholder="Search PR Number..."
+                  className="w-full bg-transparent text-[12px] text-white placeholder:text-[rgba(255,255,255,0.2)] outline-none"
                 />
                 {logSearch && (
-                  <button onClick={() => setLogSearch('')} className="text-[rgba(255,255,255,0.2)] hover:text-white transition-colors">
+                  <button onClick={() => setLogSearch('')} className="text-label hover:text-white transition-colors">
                     <IconX size={12} />
                   </button>
                 )}
@@ -3117,7 +3103,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               </div>
               <div className="text-center space-y-2">
                 <h3 className="text-lg font-bold text-white tracking-tight">Your PR List is Empty</h3>
-                <p className="text-[13px] text-[rgba(255,255,255,0.3)] max-w-sm mx-auto leading-relaxed">
+                <p className="text-[13px] text-label max-w-sm mx-auto leading-relaxed">
                   Start by importing your purchase requisition data using the import tools above.
                 </p>
               </div>
@@ -3200,17 +3186,17 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                         <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)] space-y-3 animate-slide-down">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">PO Class</p>
+                              <p className="text-[9px] font-bold text-label uppercase">PO Class</p>
                               <p className="text-[11px] text-white font-medium">{row['PO Class'] || 'N/A'}</p>
                             </div>
                             <div>
-                              <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">QC Ref</p>
+                              <p className="text-[9px] font-bold text-label uppercase">QC Ref</p>
                               <p className="text-[11px] text-white font-medium">{row['QC Ref.'] || 'N/A'}</p>
                             </div>
                           </div>
 
                           <div>
-                            <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase">Doc. Remarks</p>
+                            <p className="text-[9px] font-bold text-label uppercase">Doc. Remarks</p>
                             <p className="text-[11px] text-[rgba(255,255,255,0.7)] font-medium italic truncate">
                               {row['Doc. Remarks'] || 'No remarks'}
                               {row._pos && row._pos.length > 1 && ` (Merged: ${row._pos.join(', ')})`}
@@ -3236,12 +3222,12 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                             {prLoading[row.Ref] ? (
                               <div className="flex items-center gap-2 py-1">
                                 <IconLoader2 size={12} className="text-[#F59E0B] animate-spin" />
-                                <span className="text-[10px] text-[rgba(255,255,255,0.3)]">Fetching additional webhook logs...</span>
+                                <span className="text-[10px] text-label">Fetching additional webhook logs...</span>
                               </div>
                             ) : prError[row.Ref] ? (
                               <p className="text-[10px] text-red-400">Failed to fetch logs: {prError[row.Ref]}</p>
                             ) : prDetails[row.Ref] ? (
-                              <div className="bg-[rgba(255,255,255,0.02)] p-2.5 rounded-lg border border-[rgba(255,255,255,0.04)] text-[11px] text-[rgba(255,255,255,0.7)] space-y-1 max-h-[100px] overflow-y-auto scrollbar-thin">
+                              <div className="bg-[rgba(255,255,255,0.02)] p-2.5 rounded-lg border-card text-[11px] text-[rgba(255,255,255,0.7)] space-y-1 max-h-[100px] overflow-y-auto scrollbar-thin">
                                 {renderWebhookDataInline(prDetails[row.Ref])}
                               </div>
                             ) : (
@@ -3417,27 +3403,27 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
           />
           {/* Modal Box */}
           <div 
-            className="relative w-full max-w-4xl bg-[#090e17] border border-[rgba(255,255,255,0.08)] rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-zoom-in animate-duration-200"
+            className="relative w-full max-w-4xl bg-[#090e17] border border-[rgba(255,255,255,0.08)] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden animate-zoom-in animate-duration-200"
             style={{
               boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5), 0 0 40px rgba(245, 158, 11, 0.05)'
             }}
           >
             {/* Header */}
-            <div className="p-6 border-b border-[rgba(255,255,255,0.08)] flex items-center justify-between bg-[#0e1420]">
-              <div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-black text-[#F59E0B] uppercase tracking-[0.2em]">Purchase Order Details</span>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+            <div className="p-4 sm:p-6 border-b border-[rgba(255,255,255,0.08)] flex items-center justify-between bg-[#0e1420]">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <span className="text-[9px] sm:text-[11px] font-black text-[#F59E0B] uppercase tracking-[0.2em]">PO Details</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider ${
                     selectedCard.Status === 'Approved' 
-                      ? 'bg-[rgba(16,185,129,0.15)] text-[#10B981] border border-[rgba(16,185,129,0.3)]' 
+                      ? 'bg-[rgba(16,185,129,0.15)] text-semantic-increase border border-[rgba(16,185,129,0.3)]' 
                       : selectedCard.Status === 'Open' 
-                      ? 'bg-[rgba(245,158,11,0.15)] text-[#F59E0B] border border-[rgba(245,158,11,0.3)]' 
-                      : 'bg-[rgba(239,68,68,0.15)] text-[#EF4444] border border-[rgba(239,68,68,0.3)]'
+                      ? 'bg-[rgba(245,158,11,0.15)] text-semantic-alert border border-[rgba(245,158,11,0.3)]' 
+                      : 'bg-[rgba(239,68,68,0.15)] text-semantic-decrease border border-[rgba(239,68,68,0.3)]'
                   }`}>
                     {selectedCard.Status || 'Open'}
                   </span>
                 </div>
-                <h2 className="text-2xl font-black text-[#F59E0B] tracking-tight mt-1">
+                <h2 className="text-lg sm:text-2xl font-black text-[#F59E0B] tracking-tight mt-1 truncate">
                   {selectedCard.Ref || 'N/A'}
                 </h2>
               </div>
@@ -3450,66 +3436,66 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-8 scrollbar-thin">
               {/* Row 1: General Info & Supplier details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* General Block */}
-                <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6">
-                  <h4 className="text-xs font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4 border-b border-[rgba(255,255,255,0.04)] pb-2 flex items-center gap-2">
+                <div className="bg-[#121824] border-card rounded-2xl p-6">
+                  <h4 className="text-xs font-black text-label uppercase tracking-wider mb-4 border-b border-card/40 pb-2 flex items-center gap-2">
                     <IconBriefcase size={14} className="text-[#F59E0B]" /> General Information
                   </h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-xs">
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Project</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Project</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard.Project || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Company</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Company</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard.Company || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Supplier</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Supplier</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard.Supplier || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">PO Class</p>
+                      <p className="font-bold text-label uppercase text-[9px]">PO Class</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard['PO Class'] || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">PO Date</p>
+                      <p className="font-bold text-label uppercase text-[9px]">PO Date</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard['PO Date'] || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Month</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Month</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard.Month || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Workflow & Approvals Block */}
-                <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6">
-                  <h4 className="text-xs font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4 border-b border-[rgba(255,255,255,0.04)] pb-2 flex items-center gap-2">
+                <div className="bg-[#121824] border-card rounded-2xl p-6">
+                  <h4 className="text-xs font-black text-label uppercase tracking-wider mb-4 border-b border-card/40 pb-2 flex items-center gap-2">
                     <IconFileCertificate size={14} className="text-[#F59E0B]" /> Workflow & Approvals
                   </h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-xs">
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Pending Approval</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Pending Approval</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard['Pending Approval'] || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Approval Config</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Approval Config</p>
                       <p className="text-[#F59E0B] font-extrabold text-sm mt-0.5">{selectedCard['Approval Config'] || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Status 1</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Status 1</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard.Status_1 || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Approve / Reject</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Approve / Reject</p>
                       <p className="text-white font-semibold text-sm mt-0.5">{selectedCard['Approve / Reject'] || 'N/A'}</p>
                     </div>
                     <div className="col-span-2">
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Approval History</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Approval History</p>
                       <p className="text-[rgba(255,255,255,0.7)] font-medium text-xs mt-1 bg-[#090e17] p-3 rounded-lg border border-[rgba(255,255,255,0.03)]">
                         {selectedCard['Approval History'] || 'No workflow logs logged.'}
                       </p>
@@ -3519,17 +3505,17 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               </div>
 
               {/* Row 2: Financial Details */}
-              <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6">
-                <h4 className="text-xs font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4 border-b border-[rgba(255,255,255,0.04)] pb-2 flex items-center gap-2">
+              <div className="bg-[#121824] border-card rounded-2xl p-6">
+                <h4 className="text-xs font-black text-label uppercase tracking-wider mb-4 border-b border-card/40 pb-2 flex items-center gap-2">
                   <IconCoins size={14} className="text-[#F59E0B]" /> Financial Breakdown
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs">
                   <div className="bg-[#090e17] p-4 rounded-xl border border-[rgba(255,255,255,0.02)]">
-                    <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Net Price</p>
+                    <p className="font-bold text-label uppercase text-[9px]">Net Price</p>
                     <p className="text-white font-black text-sm mt-1">AED {netPriceStr}</p>
                   </div>
                   <div className="bg-[#090e17] p-4 rounded-xl border border-[rgba(255,255,255,0.02)]">
-                    <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">VAT</p>
+                    <p className="font-bold text-label uppercase text-[9px]">VAT</p>
                     <p className="text-white font-black text-sm mt-1">AED {selectedCard.VAT || '0.00'}</p>
                   </div>
                   <div className="bg-[rgba(245,158,11,0.03)] p-4 rounded-xl border border-[rgba(245,158,11,0.15)] shadow-inner">
@@ -3537,7 +3523,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                     <p className="text-[#F59E0B] font-black text-base mt-1">AED {selectedCard['Total Price'] || '0.00'}</p>
                   </div>
                   <div className="bg-[#090e17] p-4 rounded-xl border border-[rgba(255,255,255,0.02)]">
-                    <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Discount</p>
+                    <p className="font-bold text-label uppercase text-[9px]">Discount</p>
                     <p className="text-white font-semibold text-sm mt-1">{selectedCard.Discount || 'No Discount'}</p>
                   </div>
                 </div>
@@ -3546,7 +3532,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                   <div className="mt-6 p-5 rounded-2xl border bg-black/40 flex flex-col md:flex-row items-center justify-between gap-5 border-[rgba(255,255,255,0.05)] shadow-md">
                     <div className="flex items-start md:items-center gap-6 w-full md:w-auto justify-center md:justify-start">
                       <div className="text-center md:text-left">
-                        <p className="text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">Initial Price (Baseline)</p>
+                        <p className="text-[9px] font-bold text-label uppercase tracking-widest">Initial Price (Baseline)</p>
                         <p className="text-sm font-semibold text-[rgba(255,255,255,0.45)] line-through mt-0.5">AED {originalPriceStr}</p>
                       </div>
                       <div className="text-sm text-[rgba(255,255,255,0.2)] font-black mt-3 md:mt-0">&rarr;</div>
@@ -3612,21 +3598,21 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
               {/* Row 3: Context and Meta details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6">
-                  <h4 className="text-xs font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4 border-b border-[rgba(255,255,255,0.04)] pb-2 flex items-center gap-2">
+                <div className="bg-[#121824] border-card rounded-2xl p-6">
+                  <h4 className="text-xs font-black text-label uppercase tracking-wider mb-4 border-b border-card/40 pb-2 flex items-center gap-2">
                     <IconFileText size={14} className="text-[#F59E0B]" /> Audit Log & Context
                   </h4>
                   <div className="space-y-4 text-xs">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Entered By</p>
+                        <p className="font-bold text-label uppercase text-[9px]">Entered By</p>
                         <div className="flex items-center gap-1.5 mt-1 font-semibold text-white">
                           <IconUser size={12} className="text-[rgba(255,255,255,0.4)]" />
                           <span>{selectedCard['Entered By'] || 'N/A'}</span>
                         </div>
                       </div>
                       <div>
-                        <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Entered Time</p>
+                        <p className="font-bold text-label uppercase text-[9px]">Entered Time</p>
                         <div className="flex items-center gap-1.5 mt-1 font-semibold text-white">
                           <IconClock size={12} className="text-[rgba(255,255,255,0.4)]" />
                           <span>{selectedCard['Entered Time'] || 'N/A'}</span>
@@ -3636,24 +3622,24 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Req Ref</p>
+                        <p className="font-bold text-label uppercase text-[9px]">Req Ref</p>
                         <p className="text-white font-semibold text-sm mt-1">{selectedCard['Req Ref'] || 'N/A'}</p>
                       </div>
                       <div>
-                        <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">QC Ref</p>
+                        <p className="font-bold text-label uppercase text-[9px]">QC Ref</p>
                         <p className="text-white font-semibold text-sm mt-1">{selectedCard['QC Ref.'] || 'N/A'}</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6">
-                  <h4 className="text-xs font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4 border-b border-[rgba(255,255,255,0.04)] pb-2 flex items-center gap-2">
+                <div className="bg-[#121824] border-card rounded-2xl p-6">
+                  <h4 className="text-xs font-black text-label uppercase tracking-wider mb-4 border-b border-card/40 pb-2 flex items-center gap-2">
                     <IconFileCertificate size={14} className="text-[#F59E0B]" /> Remarks & Conditions
                   </h4>
                   <div className="space-y-4 text-xs">
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Doc. Remarks</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Doc. Remarks</p>
                       <p className="text-white font-medium text-xs mt-1 bg-[#090e17] p-2.5 rounded-lg border border-[rgba(255,255,255,0.03)] italic">
                         {(() => {
                           const val = selectedCard['Doc. Remarks'] || selectedCard.Doc_Remarks || selectedCard.Remarks || selectedCard.remarks;
@@ -3663,7 +3649,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                       </p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Terms & Conditions</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Terms & Conditions</p>
                       <p className="text-white font-semibold text-xs mt-1 bg-[#090e17]/50 p-2 rounded-lg border border-[rgba(255,255,255,0.02)]" title={selectedCard['Terms & Conditions']}>
                         {(() => {
                           const val = selectedCard['Terms & Conditions'] || selectedCard.Terms_Conditions || selectedCard.terms;
@@ -3673,7 +3659,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                       </p>
                     </div>
                     <div>
-                      <p className="font-bold text-[rgba(255,255,255,0.3)] uppercase text-[9px]">Attachments</p>
+                      <p className="font-bold text-label uppercase text-[9px]">Attachments</p>
                       <p className="text-[rgba(255,255,255,0.6)] font-semibold text-xs mt-1">
                         {selectedCard.Attachments || selectedCard.attachments || 'No attachments identified.'}
                       </p>
@@ -3683,8 +3669,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
               </div>
 
               {/* Webhook Deep Insights Block */}
-              <div className="bg-[#121824] border border-[rgba(255,255,255,0.04)] rounded-2xl p-6">
-                <h4 className="text-xs font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider mb-4 border-b border-[rgba(255,255,255,0.04)] pb-2 flex items-center justify-between">
+              <div className="bg-[#121824] border-card rounded-2xl p-6">
+                <h4 className="text-xs font-black text-label uppercase tracking-wider mb-4 border-b border-card/40 pb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <IconFileText size={14} className="text-[#F59E0B]" /> PR List Insights
                   </div>
@@ -3712,7 +3698,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                     {renderWebhookDataFull(prDetails[selectedCard.Ref])}
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 p-3 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.04)] rounded-xl text-xs text-[rgba(255,255,255,0.4)]">
+                  <div className="flex items-center gap-2 p-3 bg-[rgba(255,255,255,0.02)] border-card rounded-xl text-xs text-[rgba(255,255,255,0.4)]">
                     <span>No Req Ref reference available to query webhook.</span>
                   </div>
                 )}
@@ -3760,7 +3746,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                 </div>
                 <button 
                   onClick={() => { setRemarksInput({}); setComparisonModal({ ...comparisonModal, show: false }); }}
-                  className="p-3 hover:bg-white/5 rounded-2xl transition-all text-[rgba(255,255,255,0.3)] hover:text-white group"
+                  className="p-3 hover:bg-white/5 rounded-2xl transition-all text-label hover:text-white group"
                 >
                   <IconX size={24} className="group-hover:rotate-90 transition-transform duration-300" />
                 </button>

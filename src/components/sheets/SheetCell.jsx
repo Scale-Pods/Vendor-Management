@@ -16,13 +16,9 @@ const SheetCell = React.memo(({
 
   return (
     <div
-      onClick={(e) => {
-        if (!canPopover) return;
-        onClick?.(value, column, e);
-      }}
-      onDoubleClick={(e) => {
-        onDoubleClick?.(value, column, e);
-      }}
+      onClick={(e) => onClick?.(value, column, e)}
+      onDoubleClick={(e) => onDoubleClick?.(value, column, e)}
+      title={canPopover ? displayValue : undefined}
       style={{
         position: isFrozen ? 'sticky' : 'relative',
         left: isFrozen ? 56 : undefined,
@@ -38,7 +34,7 @@ const SheetCell = React.memo(({
         fontSize: '12px',
         fontWeight: isFrozen ? 700 : 500,
         color: isFrozen ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)',
-        cursor: canPopover ? 'pointer' : 'default',
+        cursor: 'default',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
@@ -49,7 +45,6 @@ const SheetCell = React.memo(({
         flexShrink: 0,
         userSelect: 'none',
       }}
-      title={displayValue}
     >
       {displayValue}
     </div>

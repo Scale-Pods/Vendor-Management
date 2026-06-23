@@ -29,8 +29,6 @@ const StatusBadge = ({ status }) => {
 };
 
 
-
-
 const HistoryCard = ({ state }) => {
   return (
     <div className="p-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] rounded-[12px] space-y-3">
@@ -62,7 +60,6 @@ const HistoryCard = ({ state }) => {
     </div>
   );
 };
-
 
 const PRTable = ({ showChangesOnly = false }) => {
   const [selectedPR, setSelectedPR] = useState(null);
@@ -96,22 +93,25 @@ const PRTable = ({ showChangesOnly = false }) => {
     );
 
   return (
-    <div className="relative space-y-6 stagger-item">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <h2 className="text-2xl font-bold text-white">
-          {showChangesOnly ? 'Change Detection Alerts' : 'PR/PO Records'}
-        </h2>
+    <div className="relative px-3 sm:px-6 md:px-8 py-4 md:py-6 space-y-6 stagger-item min-h-screen">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            {showChangesOnly ? 'Change Detection Alerts' : 'PR/PO Records'}
+          </h2>
+          <p className="text-[10px] sm:text-xs text-white/30 font-black uppercase tracking-[0.2em] mt-0.5">Transactional Master Log</p>
+        </div>
         
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          {loading && <IconRefresh className="w-5 h-5 text-[#F59E0B] animate-spin" />}
-          <div className="relative flex-1 md:w-64">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          {loading && <IconRefresh className="w-4 h-4 sm:w-5 sm:h-5 text-[#F59E0B] animate-spin shrink-0" />}
+          <div className="relative flex-1 sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[rgba(255,255,255,0.3)]" />
             <input 
               type="text" 
               placeholder="Filter records..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-[10px] text-sm text-white focus:border-[rgba(245,158,11,0.5)] focus:ring-[3px] focus:ring-[rgba(245,158,11,0.08)] transition-all outline-none"
+              className="w-full pl-10 pr-4 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-[10px] text-sm text-white focus:border-[rgba(245,158,11,0.5)] transition-all outline-none"
             />
           </div>
           <button className="p-2.5 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-[10px] text-[rgba(255,255,255,0.5)] hover:text-white transition-colors">
@@ -125,12 +125,12 @@ const PRTable = ({ showChangesOnly = false }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.07)]">
-                <th className="px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">PR Number</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Latest Description</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Qty</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider text-right">Action</th>
+                <th className="px-3 sm:px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">PR Number</th>
+                <th className="px-3 sm:px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider hidden lg:table-cell">Project</th>
+                <th className="px-3 sm:px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider hidden sm:table-cell">Description</th>
+                <th className="px-3 sm:px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Qty</th>
+                <th className="px-3 sm:px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Status</th>
+                <th className="px-3 sm:px-6 py-4 text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-wider text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(255,255,255,0.05)]">
@@ -146,30 +146,30 @@ const PRTable = ({ showChangesOnly = false }) => {
                   onClick={() => setSelectedPR(pr)}
                   className={`group hover:bg-[rgba(245,158,11,0.05)] cursor-pointer transition-colors ${selectedPR?.id === pr.id ? 'bg-[rgba(245,158,11,0.05)]' : ''}`}
                 >
-                  <td className="px-6 py-4">
-                    <span className="font-bold text-white uppercase">{pr.PR || pr.PR_No}</span>
-                    <p className="text-[11px] text-[rgba(255,255,255,0.4)]">SN: {pr.Sr_No}</p>
+                  <td className="px-3 sm:px-6 py-4">
+                    <span className="text-xs sm:text-sm font-bold text-white uppercase">{pr.PR || pr.PR_No}</span>
+                    <p className="text-[10px] text-[rgba(255,255,255,0.4)]">SN: {pr.Sr_No}</p>
                   </td>
-                  <td className="px-6 py-4 text-[13px] text-[rgba(255,255,255,0.5)] font-medium max-w-[200px] truncate">{pr.Project || 'N/A'}</td>
-                  <td className="px-6 py-4">
-                    <p className="text-[13px] font-bold text-[rgba(255,255,255,0.8)] max-w-[300px] truncate">
+                  <td className="px-3 sm:px-6 py-4 text-[13px] text-[rgba(255,255,255,0.5)] font-medium max-w-[150px] truncate hidden lg:table-cell">{pr.Project || 'N/A'}</td>
+                  <td className="px-3 sm:px-6 py-4 hidden sm:table-cell">
+                    <p className="text-[13px] font-bold text-[rgba(255,255,255,0.8)] max-w-[150px] sm:max-w-[200px] truncate">
                       {pr.Description}
                     </p>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-3 sm:px-6 py-4">
                     <span className="text-[13px] font-bold text-white">{pr.Req_Qty} {pr.UOM}</span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-3 sm:px-6 py-4">
                     <div className="flex items-center gap-2">
                       <StatusBadge status={pr._hasChanges ? 'Changed' : 'Same'} />
                       {pr._hasChanges && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-[rgba(245,158,11,0.1)] text-[#F59E0B] rounded text-[9px] font-black border border-[rgba(245,158,11,0.2)]">
+                        <span className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 bg-[rgba(245,158,11,0.1)] text-[#F59E0B] rounded text-[9px] font-black border border-[rgba(245,158,11,0.2)]">
                           V{pr._history.length + 1}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-3 sm:px-6 py-4 text-right">
                     <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-[rgba(255,255,255,0.05)] rounded-lg transition-all text-[rgba(255,255,255,0.5)]">
                       <ChevronRight size={18} />
                     </button>
@@ -186,22 +186,21 @@ const PRTable = ({ showChangesOnly = false }) => {
         )}
       </div>
 
-      {/* Side Panel (Drawer) */}
       {selectedPR && (
-        <div className="fixed inset-0 z-[60] flex justify-end">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={() => setSelectedPR(null)}></div>
-          <div className="relative w-full max-w-md glass-panel !rounded-none !border-y-0 !border-r-0 border-l border-[rgba(255,255,255,0.1)] h-full flex flex-col animate-slide-in-right shadow-2xl">
-            <div className="p-8 border-b border-[rgba(255,255,255,0.08)] flex items-center justify-between">
+    <div className="fixed inset-0 z-[60] flex justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedPR(null)}></div>
+          <div className="relative w-full sm:w-[450px] md:w-[600px] lg:w-[800px] bg-[#0d1117] border-l border-white/10 h-full flex flex-col animate-slide-in-right shadow-2xl overflow-hidden">
+            <div className="p-4 sm:p-6 lg:p-8 border-b border-[rgba(255,255,255,0.08)] flex items-center justify-between">
               <div>
-                <h3 className="text-2xl font-bold text-white tracking-tight">{selectedPR.PR || selectedPR.PR_No}</h3>
-                <p className="text-[13px] text-[rgba(255,255,255,0.4)] font-medium">Version History & Comparison</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{selectedPR.PR || selectedPR.PR_No}</h3>
+                <p className="text-[11px] sm:text-[13px] text-[rgba(255,255,255,0.4)] font-medium">Version History & Comparison</p>
               </div>
               <button onClick={() => setSelectedPR(null)} className="p-2 hover:bg-[rgba(255,255,255,0.05)] rounded-full text-[rgba(255,255,255,0.5)] transition-colors">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 space-y-10">
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-10">
               <section>
                 <h4 className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] mb-4">Current Revision (Latest)</h4>
                 <div className="p-5 bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.2)] rounded-[16px] space-y-4">

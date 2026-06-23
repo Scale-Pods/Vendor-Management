@@ -67,24 +67,24 @@ const QuoteDashboard = ({ quotes, loading }) => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
             {[
               { label: 'Total Quotes', value: stats.total, icon: IconClipboardList, color: '#c8922a' },
               { label: 'Approved', value: stats.approved, icon: IconTrendingUp, color: '#10B981' },
-              { label: 'Pending Review', value: stats.pending, icon: IconCalendar, color: '#F59E0B' },
-              { label: 'Total Value (AED)', value: stats.totalValue.toLocaleString(), icon: IconCoins, color: '#3b82f6' },
+              { label: 'Pending', value: stats.pending, icon: IconCalendar, color: '#F59E0B' },
+              { label: 'Total AED', value: stats.totalValue >= 1000000 ? `${(stats.totalValue/1000000).toFixed(1)}M` : stats.totalValue.toLocaleString(), icon: IconCoins, color: '#3b82f6' },
             ].map(kpi => (
-              <div key={kpi.label} className="glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] hover:border-[rgba(255,255,255,0.15)] transition-all relative overflow-hidden group">
+              <div key={kpi.label} className="glass-panel p-4 sm:p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] hover:border-[rgba(255,255,255,0.15)] transition-all relative overflow-hidden group min-h-[110px] sm:min-h-[140px] flex flex-col justify-between">
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                   style={{ background: `radial-gradient(circle at 80% 20%, ${kpi.color}08, transparent 60%)` }} />
                 <div className="relative z-10">
                   <div className="flex justify-between items-start">
-                    <div className="p-2.5 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]" style={{ color: kpi.color }}>
-                      <kpi.icon size={20} stroke={2} />
+                    <div className="p-1.5 sm:p-2 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] text-white" style={{ color: kpi.color }}>
+                      <kpi.icon size={16} stroke={2} className="sm:w-5 sm:h-5" />
                     </div>
                   </div>
-                  <h3 className="text-2xl font-black text-white tracking-tight mt-4">{kpi.value}</h3>
-                  <p className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">{kpi.label}</p>
+                  <h3 className="text-lg sm:text-2xl font-black text-white tracking-tight mt-2 sm:mt-4 truncate">{kpi.value}</h3>
+                  <p className="text-[8px] sm:text-[9px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">{kpi.label}</p>
                 </div>
               </div>
             ))}
@@ -113,23 +113,23 @@ const QuoteDashboard = ({ quotes, loading }) => {
           </div>
 
           <div className="glass-panel border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] overflow-hidden">
-            <div className="p-5 border-b border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)]">
+            <div className="p-4 sm:p-5 border-b border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)]">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <IconReceipt2 size={18} className="text-[#c8922a]" /> Recent Quote Activity
               </h3>
             </div>
             <div className="divide-y divide-[rgba(255,255,255,0.03)]">
               {quotes.slice(0, 5).map((q, idx) => (
-                <div key={q.id || idx} className="flex items-center justify-between px-5 py-4 hover:bg-[rgba(255,255,255,0.02)] transition-colors">
-                  <div className="flex items-center gap-4">
-                    <span className="text-[#c8922a] font-black text-xs">{q.id || '—'}</span>
-                    <div>
-                      <p className="text-[12px] text-white font-semibold">{q.material}</p>
-                      <p className="text-[10px] text-white/30 font-bold">{q.supplier} · {q.project}</p>
+                <div key={q.id || idx} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-5 py-4 hover:bg-[rgba(255,255,255,0.02)] transition-colors gap-3">
+                  <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
+                    <span className="text-[#c8922a] font-black text-[10px] sm:text-xs shrink-0">{q.id || '—'}</span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] sm:text-[12px] text-white font-semibold truncate">{q.material}</p>
+                      <p className="text-[9px] sm:text-[10px] text-white/30 font-bold truncate">{q.supplier} · {q.project}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-white font-bold text-xs tabular-nums">AED {(q.total || 0).toLocaleString()}</span>
+                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
+                    <span className="text-white font-bold text-[11px] sm:text-xs tabular-nums">AED {(q.total || 0).toLocaleString()}</span>
                     <StatusBadge status={q.status} />
                   </div>
                 </div>
@@ -218,25 +218,26 @@ const QuoteData = ({ quotes, loading }) => {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[rgba(255,255,255,0.015)]">
-                {['Quote ID', 'Date', 'Supplier', 'Project', 'Material', 'Qty', 'Unit', 'Rate', 'Total (AED)', 'Status'].map(h => (
-                  <th key={h} className="px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-[0.15em] whitespace-nowrap border-b-2 border-[#c8922a]/20">{h}</th>
-                ))}
+              <tr className="bg-[rgba(255,255,255,0.015)] border-b-2 border-[#c8922a]/20">
+                <th className="px-4 sm:px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-widest whitespace-nowrap">ID</th>
+                <th className="px-4 sm:px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-widest whitespace-nowrap hidden sm:table-cell">Date</th>
+                <th className="px-4 sm:px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-widest whitespace-nowrap">Supplier</th>
+                <th className="px-4 sm:px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-widest whitespace-nowrap hidden lg:table-cell">Project</th>
+                <th className="px-4 sm:px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-widest whitespace-nowrap hidden md:table-cell">Material</th>
+                <th className="px-4 sm:px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-widest whitespace-nowrap text-right">Total</th>
+                <th className="px-4 sm:px-5 py-4 text-[9px] font-black text-white/25 uppercase tracking-widest whitespace-nowrap">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(255,255,255,0.03)]">
               {paged.map((q, idx) => (
                 <tr key={q.id || idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors group">
-                  <td className="px-5 py-4 text-[#c8922a] font-bold">{q.id || '—'}</td>
-                  <td className="px-5 py-4 text-white/60 tabular-nums">{q.date || '—'}</td>
-                  <td className="px-5 py-4 text-white/80 font-medium max-w-[180px] truncate">{q.supplier || '—'}</td>
-                  <td className="px-5 py-4 text-white/60 text-[11px] max-w-[140px] truncate">{q.project || '—'}</td>
-                  <td className="px-5 py-4 text-white/80 font-semibold max-w-[220px] truncate">{q.material || '—'}</td>
-                  <td className="px-5 py-4 text-white font-bold tabular-nums text-right">{(q.qty || 0).toLocaleString()}</td>
-                  <td className="px-5 py-4 text-white/40 text-[10px] font-bold uppercase">{q.unit || '—'}</td>
-                  <td className="px-5 py-4 text-white/70 tabular-nums text-right">{(q.rate || 0).toFixed(2)}</td>
-                  <td className="px-5 py-4 text-white font-black tabular-nums text-right">{(q.total || 0).toLocaleString()}</td>
-                  <td className="px-5 py-4"><StatusBadge status={q.status || 'Pending'} /></td>
+                  <td className="px-4 sm:px-5 py-4 text-[#c8922a] font-bold text-[11px]">{q.id || '—'}</td>
+                  <td className="px-4 sm:px-5 py-4 text-white/60 tabular-nums text-[11px] hidden sm:table-cell">{q.date || '—'}</td>
+                  <td className="px-4 sm:px-5 py-4 text-white/80 font-medium max-w-[120px] sm:max-w-[180px] truncate text-[11px]">{q.supplier || '—'}</td>
+                  <td className="px-4 sm:px-5 py-4 text-white/60 text-[10px] max-w-[100px] truncate hidden lg:table-cell">{q.project || '—'}</td>
+                  <td className="px-4 sm:px-5 py-4 text-white/80 font-semibold max-w-[150px] truncate text-[11px] hidden md:table-cell">{q.material || '—'}</td>
+                  <td className="px-4 sm:px-5 py-4 text-white font-black tabular-nums text-right text-[11px]">{(q.total || 0).toLocaleString()}</td>
+                  <td className="px-4 sm:px-5 py-4"><StatusBadge status={q.status || 'Pending'} /></td>
                 </tr>
               ))}
               {paged.length === 0 && (
@@ -331,16 +332,16 @@ const QuoteRegister = ({ subView = 'dashboard' }) => {
   };
 
   return (
-    <div className="w-full h-full text-white bg-[#06090F] min-h-screen px-4 md:px-8 py-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
-          <IconReceipt2 className="text-[#c8922a]" size={28} />
+    <div className="w-full text-white bg-[#06090F] min-h-screen px-3 sm:px-6 md:px-8 py-4 sm:py-6">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2 sm:gap-3">
+          <IconReceipt2 className="text-[#c8922a]" size={24} />
           Purchase Quote Register
         </h2>
-        <p className="text-[rgba(255,255,255,0.4)] text-sm font-medium mt-1">
+        <p className="text-[rgba(255,255,255,0.4)] text-[10px] sm:text-sm font-medium mt-1">
           {subView === 'dashboard' && 'Overview of all procurement quotes and material sourcing.'}
-          {subView === 'data' && 'Full quote register with filtering and search.'}
-          {subView === 'upload' && 'Import and manage quote data files.'}
+          {subView === 'data' && 'Full quote register with filtering.'}
+          {subView === 'upload' && 'Import and manage quote data.'}
         </p>
       </div>
 

@@ -81,17 +81,17 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
 
   return (
     <>
-      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 relative px-4 md:px-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 relative px-3 sm:px-4 md:px-8 py-4 sm:py-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
           <div>
-            <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2 sm:gap-3">
               <IconCalendar size={28} className="text-[#F59E0B]" />
               Procurement Review {year}
             </h2>
-            <p className="text-[rgba(255,255,255,0.4)] font-medium mt-1">{data.length} records across {groupedData.length} PRs requiring audit for this period.</p>
+            <p className="text-[rgba(255,255,255,0.4)] font-medium mt-1 text-xs sm:text-sm">{data.length} records across {groupedData.length} PRs requiring audit for this period.</p>
           </div>
           
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto">
             <div className="relative flex-1 md:w-64 z-50">
               <SearchBar 
                 placeholder="Search records..." 
@@ -99,7 +99,7 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                 onChange={setSearchTerm} 
               />
             </div>
-            <button onClick={fetchData} className="p-2.5 glass-panel hover:bg-[rgba(255,255,255,0.05)] rounded-xl text-[rgba(255,255,255,0.5)] transition-all">
+            <button onClick={fetchData} className="p-2 sm:p-2.5 glass-panel hover:bg-[rgba(255,255,255,0.05)] rounded-xl text-[rgba(255,255,255,0.5)] transition-all shrink-0">
               <IconRefresh size={20} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
@@ -110,11 +110,11 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)]">
-                  <th className="px-6 py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider w-10"></th>
-                  <th className="px-6 py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">PR Number</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Items</th>
-                  <th className="px-6 py-4 text-right"></th>
+                  <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider w-8 sm:w-10"></th>
+                  <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">PR Number</th>
+                  <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project</th>
+                  <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider hidden sm:table-cell">Items</th>
+                  <th className="px-4 sm:px-6 py-3 sm:py-4 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgba(255,255,255,0.04)]">
@@ -139,24 +139,24 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                         onClick={() => toggleExpand(group.PR)} 
                         className="group cursor-pointer hover:bg-[rgba(255,255,255,0.02)] transition-all border-b border-[rgba(255,255,255,0.04)]"
                       >
-                        <td className="px-6 py-5 w-10">
+                        <td className="px-4 sm:px-6 py-4 sm:py-5 w-8 sm:w-10">
                           {expandedPrs.has(group.PR) ? (
                             <IconChevronDown size={18} className="text-[rgba(255,255,255,0.3)]" />
                           ) : (
                             <IconChevronRight size={18} className="text-[rgba(255,255,255,0.3)]" />
                           )}
                         </td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 sm:px-6 py-4 sm:py-5">
                           <div className="flex flex-col">
                             <span className="text-sm font-bold text-white uppercase">{group.PR}</span>
-                            <span className="text-[10px] text-[rgba(255,255,255,0.3)] uppercase font-black tracking-widest mt-0.5">PURCHASE REQUEST</span>
+                            <span className="text-[10px] text-[rgba(255,255,255,0.3)] uppercase font-black tracking-widest mt-0.5 whitespace-nowrap">PURCHASE REQUEST</span>
                           </div>
                         </td>
-                        <td className="px-6 py-5 text-[13px] text-[rgba(255,255,255,0.65)] font-medium">{group.Project}</td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 sm:px-6 py-4 sm:py-5 text-[13px] text-[rgba(255,255,255,0.65)] font-medium max-w-[120px] sm:max-w-xs truncate">{group.Project}</td>
+                        <td className="px-4 sm:px-6 py-4 sm:py-5 hidden sm:table-cell">
                           <span className="text-xs font-bold text-[#F59E0B]">{materialItems.length} material{materialItems.length !== 1 ? 's' : ''}</span>
                         </td>
-                        <td className="px-6 py-5 text-right">
+                        <td className="px-4 sm:px-6 py-4 sm:py-5 text-right">
                           <button 
                             onClick={(e) => { e.stopPropagation(); onAuditSelect(group.PR); }}
                             className="p-2 inline-flex bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.4)] hover:bg-[#F59E0B] hover:text-black rounded-lg transition-all"
@@ -169,7 +169,7 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                         <tr className="bg-[rgba(255,255,255,0.01)]">
                           <td colSpan={5} className="px-0 py-0">
                             {(group.previousCharges != null || group.currentCharges != null) && (
-                              <div className="flex items-center gap-8 px-6 py-3 bg-[rgba(245,158,11,0.04)] border-b border-[rgba(255,255,255,0.04)]">
+                              <div className="flex flex-wrap items-center gap-3 sm:gap-8 px-4 sm:px-6 py-3 bg-[rgba(245,158,11,0.04)] border-b border-[rgba(255,255,255,0.04)]">
                                 <div className="flex items-center gap-2">
                                   <span className="text-[9px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Previous:</span>
                                   <span className="text-xs font-bold text-white">{group.previousCharges}</span>
@@ -182,28 +182,28 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                             )}
                             <table className="w-full">
                               <thead>
-                                <tr className="border-b border-t border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)]">
-                                  <th className="px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider w-10"></th>
-                                  <th className="px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">#</th>
-                                  <th className="px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Description</th>
-                                  <th className="px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Previous Charges</th>
-                                  <th className="px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Current Charges</th>
-                                </tr>
+                                  <tr className="border-b border-t border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)]">
+                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider w-8 sm:w-10"></th>
+                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">#</th>
+                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Description</th>
+                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Prev.</th>
+                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Curr.</th>
+                                  </tr>
                               </thead>
                               <tbody className="divide-y divide-[rgba(255,255,255,0.02)]">
                                 {materialItems.map((item, idx) => (
                                   <tr key={idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors">
-                                    <td className="px-6 py-2.5"></td>
-                                    <td className="px-6 py-2.5 text-xs text-[rgba(255,255,255,0.4)] font-mono">
+                                    <td className="px-4 sm:px-6 py-2.5"></td>
+                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.4)] font-mono">
                                       {item['Sr.No'] || item.Sr_No || item.sr_no || item['SR NO'] || idx + 1}
                                     </td>
-                                    <td className="px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)]">
+                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)] max-w-[150px] sm:max-w-xs truncate">
                                       {item.Description || item.description || item['Material'] || item.material || '-'}
                                     </td>
-                                    <td className="px-6 py-2.5 text-xs text-[rgba(255,255,255,0.5)]">
+                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.5)]">
                                       {item['Previous Charges'] ?? item.Previous_Charges ?? item.previous_charges ?? group.previousCharges ?? '-'}
                                     </td>
-                                    <td className="px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)]">
+                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)]">
                                       {item['Current Charges'] ?? item.Current_Charges ?? item.current_charges ?? group.currentCharges ?? '-'}
                                     </td>
                                   </tr>

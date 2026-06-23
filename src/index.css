@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
-/* Force 100% scale — prevent browser zoom from affecting layout */
 html {
-  zoom: 1;
+  overflow-x: hidden;
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  width: 100%;
 }
 
 @theme {
@@ -85,6 +91,25 @@ html {
   background: radial-gradient(circle, rgba(20,184,166,0.08) 0%, transparent 70%);
   bottom: -50px;
   left: 10%;
+}
+
+/* Responsive blob sizing for mobile */
+@media (max-width: 768px) {
+  .blob-1 {
+    width: 300px;
+    height: 250px;
+    filter: blur(60px);
+  }
+  .blob-2 {
+    width: 250px;
+    height: 200px;
+    filter: blur(60px);
+  }
+  .blob-3 {
+    width: 200px;
+    height: 200px;
+    filter: blur(60px);
+  }
 }
 
 /* Custom Scrollbar */
@@ -285,6 +310,14 @@ html {
   max-height: calc(100vh - 120px);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .table-wrapper {
+    max-height: calc(100vh - 100px);
+    border-radius: 8px;
+  }
 }
 
 /* Custom scrollbar for table wrapper */

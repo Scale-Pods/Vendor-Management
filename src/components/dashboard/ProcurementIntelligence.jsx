@@ -238,7 +238,7 @@ const ProcurementIntelligence = () => {
   }
 
   return (
-    <div className="w-full h-full text-white bg-[#0d1117] min-h-screen px-3 sm:px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-8">
+    <div className="w-full text-white bg-[#0d1117] min-h-screen px-3 sm:px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-8">
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row xl:flex-row xl:items-center justify-between gap-4 sm:gap-6">
         <div>

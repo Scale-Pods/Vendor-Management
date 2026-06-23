@@ -30,10 +30,10 @@ const Skeleton = ({ className }) => (
 );
 
 const KPIStore = ({ title, value, icon: Icon, color, trend, loading }) => (
-  <div className="glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative flex flex-col justify-between min-h-[160px] h-full hover:border-[rgba(255,255,255,0.15)] transition-all">
+  <div className="glass-panel p-4 sm:p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative flex flex-col justify-between min-h-[120px] sm:min-h-[160px] h-full hover:border-[rgba(255,255,255,0.15)] transition-all">
     <div className="flex justify-between items-start">
-      <div className="p-2.5 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]" style={{ color }}>
-        <Icon size={20} stroke={2} />
+      <div className="p-2 sm:p-2.5 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]" style={{ color }}>
+        <Icon size={18} stroke={2} />
       </div>
       {trend !== undefined && !loading && (
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${trend >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
@@ -42,29 +42,29 @@ const KPIStore = ({ title, value, icon: Icon, color, trend, loading }) => (
         </span>
       )}
     </div>
-    <div className="mt-4">
+    <div className="mt-3 sm:mt-4">
       {loading ? (
-        <Skeleton className="h-8 w-24 mb-2" />
+        <Skeleton className="h-7 sm:h-8 w-24 mb-2" />
       ) : (
-        <h3 className="text-2xl font-black text-white tracking-tight">{value}</h3>
+        <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">{value}</h3>
       )}
-      <p className="text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">{title}</p>
+      <p className="text-[9px] sm:text-[10px] font-bold text-[rgba(255,255,255,0.3)] uppercase tracking-widest">{title}</p>
     </div>
   </div>
 );
 
 const CurrencyKPI = ({ title, value, icon: Icon, color, loading }) => (
-  <div className="glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative group hover:border-[rgba(255,255,255,0.15)] transition-all h-full min-h-[120px] flex flex-col justify-center">
-    <div className="flex items-center gap-4">
-      <div className="p-3 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}10`, color }}>
-        <Icon size={24} stroke={2} />
+  <div className="glass-panel p-4 sm:p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative group hover:border-[rgba(255,255,255,0.15)] transition-all h-full min-h-[100px] sm:min-h-[120px] flex flex-col justify-center">
+    <div className="flex items-center gap-3 sm:gap-4">
+      <div className="p-2 sm:p-3 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}10`, color }}>
+        <Icon size={20} stroke={2} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[9px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest mb-1 whitespace-nowrap">{title}</p>
+        <p className="text-[8px] sm:text-[9px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-widest mb-1 whitespace-nowrap">{title}</p>
         {loading ? (
-          <Skeleton className="h-7 w-3/4" />
+          <Skeleton className="h-6 sm:h-7 w-3/4" />
         ) : (
-          <h3 className="text-xl font-black text-white truncate leading-tight">AED {Number(value || 0).toLocaleString()}</h3>
+          <h3 className="text-base sm:text-xl font-black text-white truncate leading-tight">AED {Number(value || 0).toLocaleString()}</h3>
         )}
       </div>
     </div>
@@ -306,20 +306,20 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const supplierList = useMemo(() => [...new Set(rawData.map(i => i.Supplier))].filter(Boolean).sort(), [rawData]);
 
   return (
-    <div className="w-full h-full text-white bg-[#0d1117] min-h-screen px-4 md:px-8 py-6">
+    <div className="w-full h-full text-white bg-[#0d1117] min-h-screen px-3 sm:px-4 md:px-8 py-4 sm:py-6">
       {/* Header & Filters */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-8 gap-6">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-6 sm:mb-8 gap-4 sm:gap-6">
         <div>
-          <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
-            <IconLayoutDashboard className="text-[#c8922a]" size={32} />
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-white flex items-center gap-2 sm:gap-3">
+            <IconLayoutDashboard className="text-[#c8922a]" size={24} />
             Purchase Orders Dashboard
           </h2>
-          <p className="text-[rgba(255,255,255,0.4)] text-sm font-medium mt-1">
+          <p className="text-[rgba(255,255,255,0.4)] text-xs sm:text-sm font-medium mt-1">
             Real-time financial discrepancy analysis and PR optimization tracking.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
           {/* PR Search */}
           <div className="w-full sm:w-64">
             <SearchBar 
@@ -329,10 +329,10 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
             />
           </div>
 
-          <div className="relative group">
+          <div className="relative group w-full sm:w-auto">
             <IconFilter className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.2)] group-focus-within:text-[#c8922a] transition-colors" size={16} />
             <select 
-              className="bg-[#1a1f2e] border border-[rgba(255,255,255,0.08)] text-[13px] text-[rgba(255,255,255,0.8)] rounded-xl pl-10 pr-10 py-2.5 outline-none focus:border-[#c8922a] transition-all min-w-[220px] appearance-none cursor-pointer"
+              className="w-full sm:w-auto bg-[#1a1f2e] border border-[rgba(255,255,255,0.08)] text-[13px] text-[rgba(255,255,255,0.8)] rounded-xl pl-10 pr-10 py-2.5 outline-none focus:border-[#c8922a] transition-all sm:min-w-[220px] appearance-none cursor-pointer"
               value={filters.project}
               onChange={(e) => setFilters(f => ({ ...f, project: e.target.value }))}
             >
@@ -342,10 +342,10 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
             <IconArrowDownRight size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.2)] pointer-events-none" />
           </div>
 
-          <div className="relative group">
+          <div className="relative group w-full sm:w-auto">
             <IconUsers className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.2)] group-focus-within:text-[#c8922a] transition-colors" size={16} />
             <select 
-              className="bg-[#1a1f2e] border border-[rgba(255,255,255,0.08)] text-[13px] text-[rgba(255,255,255,0.8)] rounded-xl pl-10 pr-10 py-2.5 outline-none focus:border-[#c8922a] transition-all min-w-[220px] appearance-none cursor-pointer"
+              className="w-full sm:w-auto bg-[#1a1f2e] border border-[rgba(255,255,255,0.08)] text-[13px] text-[rgba(255,255,255,0.8)] rounded-xl pl-10 pr-10 py-2.5 outline-none focus:border-[#c8922a] transition-all sm:min-w-[220px] appearance-none cursor-pointer"
               value={filters.supplier}
               onChange={(e) => setFilters(f => ({ ...f, supplier: e.target.value }))}
             >
@@ -357,7 +357,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
           
           <button 
             onClick={() => window.location.reload()}
-            className="p-2.5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.06)] transition-all"
+            className="self-end sm:self-auto p-2.5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.06)] transition-all"
           >
             <IconRefresh size={20} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -365,7 +365,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
       </div>
 
       {/* Row 1 KPI */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-4 sm:mb-5">
         <KPIStore title="Total PRs" value={stats?.totalPRs || 0} icon={IconClipboardList} color={COLORS.gold} loading={loading} />
         <KPIStore title="Items with Price Changes" value={stats?.itemsWithChanges || 0} icon={IconTrendingUp} color={COLORS.amber} loading={loading} />
         <KPIStore title="Changes in PR 2025" value={prCount2025} icon={IconCalendar} color="#3b82f6" loading={loading} />
@@ -373,7 +373,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
       </div>
 
       {/* Row 2 Currency KPI */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-6 sm:mb-8">
         <CurrencyKPI title="Total Original Value" value={stats?.totalOriginal || 0} icon={IconListCheck} color="rgba(255,255,255,0.4)" loading={loading} />
         <CurrencyKPI title="Total Latest Value" value={stats?.totalLatest || 0} icon={IconTrendingUp} color={COLORS.gold} loading={loading} />
         <CurrencyKPI title="Total Savings" value={stats?.totalSavings || 0} icon={IconTrendingDown} color={COLORS.green} loading={loading} />
@@ -381,9 +381,9 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {/* Savings vs Increases by Project */}
-        <div className="lg:col-span-8 glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative">
+        <div className="lg:col-span-8 glass-panel p-4 sm:p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] relative">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Savings vs Increases by Project</h3>
             <div className="flex gap-4">
@@ -397,7 +397,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
               </div>
             </div>
           </div>
-          <div className="h-[400px]">
+          <div className="h-[250px] sm:h-[350px] md:h-[400px]">
             {loading ? (
               <Skeleton className="w-full h-full" />
             ) : (
@@ -422,7 +422,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
         </div>
 
         {/* Price Change Distribution */}
-        <div className="lg:col-span-4 glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] flex flex-col">
+        <div className="lg:col-span-4 glass-panel p-4 sm:p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] flex flex-col">
           <h3 className="text-sm font-bold text-white mb-6 uppercase tracking-wider text-center">Price Change Distribution</h3>
           <div className="flex-1 min-h-[300px]">
             {loading ? (
@@ -458,9 +458,9 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
         </div>
 
         {/* Top 10 Suppliers */}
-        <div className="lg:col-span-12 glass-panel p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)]">
+        <div className="lg:col-span-12 glass-panel p-4 sm:p-6 border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)]">
           <h3 className="text-sm font-bold text-white mb-8 uppercase tracking-wider">Top 10 Suppliers by Total Spend</h3>
-          <div className="h-[400px]">
+          <div className="h-[250px] sm:h-[350px] md:h-[400px]">
             {loading ? (
               <Skeleton className="w-full h-full" />
             ) : (
@@ -650,12 +650,12 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-[rgba(255,255,255,0.015)]">
-                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] w-32">PR / Sr</th>
-                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em]">Item Description</th>
-                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] w-48">Supplier</th>
-                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-right w-36">Original</th>
-                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-right w-36">Latest</th>
-                    <th className="px-6 py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-center w-32">Change %</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-[9px] sm:text-xs w-20 sm:w-32">PR / Sr</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-[9px] sm:text-xs">Item Description</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-[9px] sm:text-xs hidden md:table-cell w-48">Supplier</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-right text-[9px] sm:text-xs w-24 sm:w-36">Original</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-right text-[9px] sm:text-xs w-24 sm:w-36">Latest</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-black text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] text-center text-[9px] sm:text-xs w-24 sm:w-32">Change %</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[rgba(255,255,255,0.03)]">
@@ -668,25 +668,25 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
                         'hover:bg-white/2'
                       }`}
                     >
-                      <td className="px-6 py-5">
+                      <td className="px-3 sm:px-6 py-3 sm:py-5">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-white font-bold tracking-tight">{item.PR || item.PR_No}</span>
-                          <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-black uppercase tracking-tighter">Sr: {item.sr_no || item.Sr_No}</span>
+                          <span className="text-white font-bold tracking-tight text-xs sm:text-sm">{item.PR || item.PR_No}</span>
+                          <span className="text-[9px] sm:text-[10px] text-[rgba(255,255,255,0.25)] font-black uppercase tracking-tighter">Sr: {item.sr_no || item.Sr_No}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
-                        <p className="text-[rgba(255,255,255,0.8)] font-semibold line-clamp-2 max-w-md">{item.Description || item.item_description}</p>
+                      <td className="px-3 sm:px-6 py-3 sm:py-5">
+                        <p className="text-[rgba(255,255,255,0.8)] font-semibold line-clamp-2 max-w-[120px] sm:max-w-md text-xs sm:text-sm">{item.Description || item.item_description}</p>
                       </td>
-                      <td className="px-6 py-5">
-                        <span className="text-[rgba(255,255,255,0.5)] font-medium">{item.Supplier || '—'}</span>
+                      <td className="px-3 sm:px-6 py-3 sm:py-5 hidden md:table-cell">
+                        <span className="text-[rgba(255,255,255,0.5)] font-medium text-xs sm:text-sm">{item.Supplier || '—'}</span>
                       </td>
-                      <td className="px-6 py-5 text-right tabular-nums text-[rgba(255,255,255,0.4)] font-medium">
+                      <td className="px-3 sm:px-6 py-3 sm:py-5 text-right tabular-nums text-[rgba(255,255,255,0.4)] font-medium text-xs">
                         {item.orig.toLocaleString()}
                       </td>
-                      <td className="px-6 py-5 text-right tabular-nums text-white font-black">
+                      <td className="px-3 sm:px-6 py-3 sm:py-5 text-right tabular-nums text-white font-black text-xs">
                         {item.lat.toLocaleString()}
                       </td>
-                      <td className="px-6 py-5 text-center">
+                      <td className="px-3 sm:px-6 py-3 sm:py-5 text-center">
                         <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black tracking-tight ${
                           item.diffPercent > 20 ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
                           item.diffPercent > 5 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :

@@ -112,15 +112,15 @@ const VendorAnalysis = () => {
   const topVendors = vendorData.slice(0, 3);
 
   return (
-    <div className="space-y-10">
-      <div className="flex flex-col md:flex-row justify-between items-end gap-6 stagger-item">
+    <div className="space-y-6 sm:space-y-10 px-3 sm:px-4 md:px-8 py-4 md:py-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 sm:gap-6 stagger-item">
         <div>
-          <h1 className="text-4xl font-bold text-white tracking-tight mb-2">Vendor Intelligence</h1>
-          <p className="text-[rgba(255,255,255,0.4)] font-medium">Benchmarking supplier performance and financial efficiency metrics.</p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Vendor Intelligence</h1>
+          <p className="text-[rgba(255,255,255,0.4)] text-sm font-medium">Benchmarking supplier performance and financial efficiency metrics.</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 w-full md:w-auto">
           {loading && <IconRefresh className="w-5 h-5 text-[#F59E0B] animate-spin" />}
-          <div className="w-72">
+          <div className="flex-1 md:w-72">
             <SearchBar placeholder="Search suppliers..." />
           </div>
         </div>
@@ -136,19 +136,19 @@ const VendorAnalysis = () => {
       </div>
 
       {/* Spend Comparison Chart */}
-      <div className="glass-panel p-8 stagger-item" style={{ animationDelay: '400ms' }}>
-        <div className="flex items-center justify-between mb-10">
-           <div className="flex items-center gap-4">
-             <div className="w-10 h-10 bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] rounded-xl flex items-center justify-center text-[#F59E0B]">
-               <BarChart3 size={22} />
+      <div className="glass-panel p-4 sm:p-8 stagger-item" style={{ animationDelay: '400ms' }}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-10 gap-3">
+           <div className="flex items-center gap-3 sm:gap-4">
+             <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] rounded-xl flex items-center justify-center text-[#F59E0B]">
+               <BarChart3 size={18} />
              </div>
              <div>
-                <h3 className="text-xl font-bold text-white tracking-tight">Supplier Spend Distribution</h3>
-                <p className="text-[12px] text-[rgba(255,255,255,0.4)] font-medium">Comparison of total procurement volume per vendor</p>
+                <h3 className="text-base sm:text-xl font-bold text-white tracking-tight">Supplier Spend Distribution</h3>
+                <p className="text-[11px] sm:text-[12px] text-[rgba(255,255,255,0.4)] font-medium">Comparison of total procurement volume per vendor</p>
              </div>
            </div>
         </div>
-        <div className="h-96 w-full">
+        <div className="h-64 sm:h-80 md:h-96 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart layout="vertical" data={vendorData.slice(0, 8)} margin={{ left: 40, right: 60 }}>
               <CartesianGrid strokeDasharray="4 4" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.04)" />
