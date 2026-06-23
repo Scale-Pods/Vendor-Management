@@ -32,6 +32,27 @@ import ProcurementIntelligence from './components/dashboard/ProcurementIntellige
 const SIDEBAR_W = 260;
 const SESSION_DURATION = 6 * 60 * 60 * 1000; // 6 hours
 
+const VALID_PAGES = new Set([
+  'po-dashboard', 'polog', 'prlist',
+  'review-dashboard', 'review2025', 'review2026',
+  'sheets', 'qr-dashboard', 'qr-data', 'qr-material', 'qr-upload',
+  'users', 'records', 'changes', 'vendors', 'insights',
+]);
+
+function getPageFromHash() {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  if (!hash) return 'po-dashboard';
+  const parts = hash.split('/');
+  return VALID_PAGES.has(parts[0]) ? parts[0] : 'po-dashboard';
+}
+
+function getSheetTabFromHash() {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  const parts = hash.split('/');
+  if (parts[0] === 'sheets' && parts[1]) return decodeURIComponent(parts[1]);
+  return null;
+}
+
 const App = () => {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('scale_pods_user');
@@ -45,7 +66,8 @@ const App = () => {
     }
     return parsed;
   });
-  const [activeTab, setActiveTab] = useState('po-dashboard');
+  const [activeTab, setActiveTab] = useState(getPageFromHash);
+  const [sheetTab, setSheetTab] = useState(getSheetTabFromHash);
   const [selectedPR, setSelectedPR] = useState(null);
   const queryClient = useQueryClient();
 
@@ -83,6 +105,15 @@ const App = () => {
     }, 30000);
     return () => clearInterval(interval);
   }, [user]);
+
+  // Sync activeTab/sheetTab to URL hash
+  useEffect(() => {
+    let hash = activeTab;
+    if (activeTab === 'sheets' && sheetTab) {
+      hash += '/' + encodeURIComponent(sheetTab);
+    }
+    window.history.replaceState(null, '', '#' + hash);
+  }, [activeTab, sheetTab]);
 
   const handleLogin = (userData) => {
     console.log('Login event triggered with data:', userData);
@@ -455,7 +486,7 @@ const App = () => {
           {activeTab === 'review-dashboard' && <ReviewDashboard />}
           {activeTab === 'review2025' && <ReviewYear year="2025" action="25" onAuditSelect={handleSelectPR} />}
           {activeTab === 'review2026' && <ReviewYear year="2026" action="26" onAuditSelect={handleSelectPR} />}
-{activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} />}
+{activeTab === 'sheets' && !isViewer && <Sheets darkMode={true} initialTab={sheetTab} onTabChange={setSheetTab} />}
           {activeTab === 'sheets' && isViewer && <div className="p-8 text-center text-red-400 font-bold glass-panel">Access Denied: You do not have permission to access Sheets.</div>}
 
           {/* Purchase Quote Register */}

@@ -123,17 +123,18 @@ BEGIN
       COALESCE(NULLIF(TRIM("Req Ref"), ''), NULLIF(TRIM("Ref"), ''), 'N/A') AS pr,
       COALESCE(NULLIF(TRIM("Project"), ''),  '—')                           AS project,
       COALESCE(NULLIF(TRIM("Supplier"), ''), '—')                           AS supplier,
-      COALESCE(NULLIF(TRIM("Ref"), ''), '—')                                AS material,
+      COALESCE(NULLIF(TRIM("Description"), ''), NULLIF(TRIM("Ref"), ''), '—') AS material,
       COALESCE(safe_numeric("Total Price"),
                safe_numeric("Net Price"),
-               safe_numeric("Original Pirce"), 0)                           AS value
+               safe_numeric("Original Pirce"), 0)                           AS value,
+      COALESCE(safe_numeric("Req_Qty"), safe_numeric("Qty"), 0)             AS qty
     FROM po_data
     WHERE (p_project IS NULL OR TRIM("Project") = p_project)
       AND (p_supplier IS NULL OR TRIM("Supplier") = p_supplier)
     ORDER BY value DESC
     LIMIT 15
   )
-  SELECT json_agg(json_build_object('pr', pr, 'project', project, 'supplier', supplier, 'material', material, 'qty', 0, 'value', value))
+  SELECT json_agg(json_build_object('pr', pr, 'project', project, 'supplier', supplier, 'material', material, 'qty', qty, 'value', value))
   INTO v_recent_activity FROM base;
 
   -- Distinct project list (for filter dropdown)

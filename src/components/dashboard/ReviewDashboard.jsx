@@ -10,7 +10,7 @@ import {
   IconFilter, IconRefresh, IconAlertTriangle, IconVersions, IconArrowsDiff,
   IconCalendar
 } from '@tabler/icons-react';
-import { supabase } from '../../lib/supabase';
+import { adminSupabase as supabase } from '../../lib/supabase';
 import { SearchBar } from '../ui/search-bar';
 
 /* ─── Styles & Theme Constants ─── */
@@ -78,40 +78,26 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const { data: rawData = [], isLoading: loading, error } = useQuery({
     queryKey: ['review-dashboard-data'],
     queryFn: async () => {
-      // 1. Try Supabase first
-      const { data: sbData, error: sbError } = await supabase
-        .from('purchase_orders')
-        .select('*');
-      
-      if (!sbError && sbData && sbData.length > 0) {
-        return sbData;
-      }
+      const [res25, res26] = await Promise.all([
+        supabase.from('material_detail_25').select('*').limit(1000000),
+        supabase.from('material_detail_26').select('*').limit(1000000)
+      ]);
 
-      // 2. Fallback to n8n if Supabase is empty/not configured
-      console.log('Supabase empty or missing, falling back to n8n...');
-      const n8nUrl = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_MASTER_PO}?action=PO Data`;
-      const response = await fetch(n8nUrl);
-      const json = await response.json();
-      
-      // Extract data array from n8n response
-      const n8nData = Array.isArray(json) ? (json[0]?.data || json) : (json.data || []);
-      
-      // Map n8n fields to internal dashboard fields
-      return n8nData.map(item => ({
-        ...item,
-        PR: item['Req Ref'] || item.Ref || 'N/A',
-        Description: item.Description || item.Ref || 'No Description',
-        Project: item.Project || 'Unknown',
-        Supplier: item.Supplier || 'Unknown',
-        change1_total: parseFloat(String(item['Original Pirce'] || item['Net Price'] || 0).replace(/,/g, '')),
-        change2_total: item.change_in_price_1 || null,
-        change3_total: item.change_in_price_2 || null,
-        change4_total: item.change_in_price_3 || null,
-        change5_total: item.change_in_price_4 || null,
-        change6_total: item.change_in_price_5 || null,
-        // Support standard changeN_total format if redirected from supabase
-        ...item 
-      }));
+      const mapItem = (item) => ({
+        PR: item.PR || item.pr || 'N/A',
+        Description: item.Description || item.description || 'No Description',
+        Project: item.Project || item.project || 'Unknown',
+        Supplier: item.change1_supplier || 'Unknown',
+        change1_total: item.change1_total ? parseFloat(String(item.change1_total).replace(/,/g, '')) : null,
+        change2_total: item.change2_total ? parseFloat(String(item.change2_total).replace(/,/g, '')) : null,
+        change3_total: item.change3_total ? parseFloat(String(item.change3_total).replace(/,/g, '')) : null,
+        change4_total: item.change4_total ? parseFloat(String(item.change4_total).replace(/,/g, '')) : null,
+        change5_total: item.change5_total ? parseFloat(String(item.change5_total).replace(/,/g, '')) : null,
+      });
+
+      const data25 = (res25.data || []).map(mapItem);
+      const data26 = (res26.data || []).map(mapItem);
+      return [...data25, ...data26];
     },
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
@@ -121,11 +107,8 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const { data: prCount2025 = 0 } = useQuery({
     queryKey: ['review-pr-count-2025'],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_REVIEW_YEAR}?action=25`);
-      if (!response.ok) throw new Error('Failed to fetch 2025 data');
-      const result = await response.json();
-      const data = Array.isArray(result) ? result : (result.data || []);
-      return new Set(data.map(item => item.PR || item.pr || item.PR_No)).size;
+      const { data } = await supabase.from('pr_data_25').select('PR').limit(1000000);
+      return new Set((data || []).map(item => item.PR).filter(Boolean)).size;
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -133,11 +116,8 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const { data: prCount2026 = 0 } = useQuery({
     queryKey: ['review-pr-count-2026'],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_REVIEW_YEAR}?action=26`);
-      if (!response.ok) throw new Error('Failed to fetch 2026 data');
-      const result = await response.json();
-      const data = Array.isArray(result) ? result : (result.data || []);
-      return new Set(data.map(item => item.PR || item.pr || item.PR_No)).size;
+      const { data } = await supabase.from('material_detail_26').select('pr').limit(1000000);
+      return new Set((data || []).map(item => item.pr).filter(Boolean)).size;
     },
     staleTime: 5 * 60 * 1000,
   });

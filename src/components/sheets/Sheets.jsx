@@ -4,6 +4,7 @@ import {
   IconX, IconClock, IconLayoutColumns, IconList, IconTableExport, IconHash, IconDownload, IconSearch
 } from '@tabler/icons-react';
 import BoxLoader from '../ui/BoxLoader';
+import MorphLoader from '../ui/MorphLoader';
 import SheetRow from './SheetRow';
 import { downloadXLSX } from '../../utils/exportXLSX';
 import { useSheetData } from '../../hooks/useSheetData';
@@ -26,17 +27,8 @@ const TABLE_SCHEMAS = {
 
 const TABS = ['PO Data', 'material_detail_25', 'material_detail_26', 'pr_data_25', 'pr_data_26', 'purchase_orders', 'merged'];
 
-function useDebounce(value, delay = 300) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return debounced;
-}
-
-const Sheets = () => {
-  const [activeTab, setActiveTab] = useState('pr_data_26');
+const Sheets = ({ initialTab, onTabChange }) => {
+  const [activeTab, setActiveTab] = useState(initialTab || 'pr_data_26');
   const [colWidths, setColWidths] = useState({});
   const [selectedCell, setSelectedCell] = useState(null);
   const [popover, setPopover] = useState(null);
@@ -46,12 +38,36 @@ const Sheets = () => {
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [localOverrides, setLocalOverrides] = useState({});
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
 
   const scrollRef = useRef(null);
   const editInputRef = useRef(null);
-  const debouncedSearch = useDebounce(searchTerm, 300);
+  const hasNextPageRef = useRef(null);
+  const isFetchingNextPageRef = useRef(null);
+  const fetchNextPageRef = useRef(null);
 
-  const { data: rawData = [], isLoading, isFetching } = useSheetData(activeTab);
+  const { data: rawData = [], isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage } = useSheetData(activeTab, { sortOrder });
+
+  hasNextPageRef.current = hasNextPage;
+  isFetchingNextPageRef.current = isFetchingNextPage;
+  fetchNextPageRef.current = fetchNextPage;
+
+  const loadingAllData = !!(searchTerm && hasNextPage);
+
+  useEffect(() => {
+    if (searchTerm && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [searchTerm, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasNextPageRef.current || isFetchingNextPageRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    if (scrollHeight - scrollTop - clientHeight < 5000) {
+      fetchNextPageRef.current?.();
+    }
+  }, []);
 
   const activeCols = useMemo(() => {
     const schema = TABLE_SCHEMAS[activeTab];
@@ -94,15 +110,16 @@ const Sheets = () => {
   }, [rawData, sortOrder]);
 
   const displayData = useMemo(() => {
-    if (!debouncedSearch || !sortedData.length) return sortedData;
-    const lower = debouncedSearch.toLowerCase();
+    if (loadingAllData || !sortedData.length) return sortedData;
+    if (!searchTerm) return sortedData;
+    const lower = searchTerm.toLowerCase();
     return sortedData.filter(row =>
-      activeCols.some(col => {
+      Object.keys(row).some(col => {
         const v = row[col];
         return v != null && String(v).toLowerCase().includes(lower);
       })
     );
-  }, [sortedData, debouncedSearch, activeCols]);
+  }, [sortedData, searchTerm, loadingAllData]);
 
   const rowVirtualizer = useVirtualizer({
     count: displayData.length,
@@ -246,13 +263,14 @@ const Sheets = () => {
 
   const handleTabSwitch = useCallback((tab) => {
     setActiveTab(tab);
+    onTabChange?.(tab);
     setSearchTerm('');
     setSelectedCell(null);
     setPopover(null);
     setEditingCell(null);
     setEditValue('');
     setLocalOverrides({});
-  }, []);
+  }, [onTabChange]);
 
   const renderSkeleton = () => (
     <div className="h-full w-full" style={{ overflow: 'hidden' }}>
@@ -367,18 +385,26 @@ const Sheets = () => {
           </div>
 
           <button
-            onClick={() => downloadXLSX(rawData, `${activeTab.replace(/_/g, '_')}.xlsx`)}
+            onClick={() => {
+              if (loadingAllData) return;
+              if (searchTerm && displayData.length < rawData.length) {
+                setShowDownloadDialog(true);
+              } else {
+                downloadXLSX(rawData, `${activeTab.replace(/_/g, '_')}.xlsx`);
+              }
+            }}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all"
             style={{
               fontSize: '10px',
               fontWeight: 900,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
-              background: 'rgba(0,200,100,0.1)',
-              color: '#00c864',
-              border: '1px solid rgba(0,200,100,0.25)',
+              background: loadingAllData ? 'rgba(255,255,255,0.03)' : 'rgba(0,200,100,0.1)',
+              color: loadingAllData ? 'rgba(255,255,255,0.2)' : '#00c864',
+              border: `1px solid ${loadingAllData ? 'rgba(255,255,255,0.06)' : 'rgba(0,200,100,0.25)'}`,
+              cursor: loadingAllData ? 'not-allowed' : 'pointer',
             }}
-            title={`Download ${activeTab.replace(/_/g, ' ')} as Excel`}
+            title={loadingAllData ? 'Loading all data — please wait...' : `Download ${activeTab.replace(/_/g, ' ')} as Excel`}
           >
             <IconDownload size={13} />
             DOWNLOAD EXCEL
@@ -414,15 +440,20 @@ const Sheets = () => {
         ) : displayData.length === 0 && !isFetching ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, fontWeight: 700 }}>
-              {debouncedSearch ? 'No records match your search.' : 'No records found for this table.'}
+              {searchTerm ? 'No records match your search.' : 'No records found for this table.'}
             </p>
           </div>
         ) : (
-          <>
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
             <div
               ref={scrollRef}
+              onScroll={handleScroll}
               className="h-full w-full overflow-auto"
-              style={{ scrollBehavior: 'auto' }}
+              style={{
+                scrollBehavior: 'auto',
+                opacity: loadingAllData ? 0.2 : 1,
+                transition: 'opacity 0.5s ease',
+              }}
             >
               {isFetching ? renderSkeleton() : (
                 <div style={{ paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px` }}>
@@ -524,9 +555,12 @@ const Sheets = () => {
                       </div>
                     );
                   })}
+
                 </div>
               )}
             </div>
+
+            <MorphLoader visible={loadingAllData} searchTerm={searchTerm} />
 
             {editingCell && (
               <input
@@ -546,7 +580,7 @@ const Sheets = () => {
                   position: 'fixed',
                   left: editingCell.x,
                   top: editingCell.y,
-                  width: editingCell.width - 32,
+                  width: editingCell.width,
                   height: editingCell.height,
                   zIndex: 150,
                   background: '#0d1117',
@@ -558,6 +592,7 @@ const Sheets = () => {
                   padding: '0 16px',
                   outline: 'none',
                   fontFamily: 'inherit',
+                  boxSizing: 'border-box',
                 }}
               />
             )}
@@ -599,7 +634,7 @@ const Sheets = () => {
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -629,7 +664,97 @@ const Sheets = () => {
           0%, 100% { opacity: 0.4; }
           50% { opacity: 0.8; }
         }
+        @keyframes morph-0 {
+          0%, 100% { transform: translate(0,0) scale(1); }
+          25% { transform: translate(16px,-16px) scale(1.3); }
+          50% { transform: translate(32px,0) scale(0.7); }
+          75% { transform: translate(16px,16px) scale(1.15); }
+        }
+        @keyframes morph-1 {
+          0%, 100% { transform: translate(0,0) scale(1) rotate(0deg); }
+          25% { transform: translate(-16px,-16px) scale(1.4) rotate(90deg); }
+          50% { transform: translate(-32px,0) scale(0.6) rotate(180deg); }
+          75% { transform: translate(-16px,16px) scale(1.25) rotate(270deg); }
+        }
+        @keyframes morph-2 {
+          0%, 100% { transform: translate(0,0) scale(1); }
+          25% { transform: translate(-16px,16px) scale(0.85); }
+          50% { transform: translate(0,32px) scale(1.5); }
+          75% { transform: translate(16px,16px) scale(0.75); }
+        }
+        @keyframes morph-3 {
+          0%, 100% { transform: translate(0,0) scale(1) rotate(0deg); }
+          25% { transform: translate(16px,16px) scale(1.15) rotate(-90deg); }
+          50% { transform: translate(0,-32px) scale(1.4) rotate(-180deg); }
+          75% { transform: translate(-16px,-16px) scale(0.85) rotate(-270deg); }
+        }
       `}} />
+
+      {showDownloadDialog && (
+        <div
+          onClick={() => setShowDownloadDialog(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#0d1117', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 12, padding: 28, maxWidth: 380, width: '90%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6)', position: 'relative',
+            }}
+          >
+            <button
+              onClick={() => setShowDownloadDialog(false)}
+              style={{ position: 'absolute', top: 12, right: 12, padding: 4, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', background: 'none', border: 'none' }}
+            >
+              <IconX size={14} />
+            </button>
+
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, paddingRight: 24 }}>
+              You have active filters applied.
+            </div>
+
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, lineHeight: 1.5, marginBottom: 20, fontWeight: 500 }}>
+              Export the {displayData.length} visible rows or the entire table?
+            </p>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => {
+                  downloadXLSX(displayData, `${activeTab.replace(/_/g, '_')}_filtered.xlsx`);
+                  setShowDownloadDialog(false);
+                }}
+                style={{
+                  flex: 1, padding: '14px 16px', borderRadius: 10, border: 'none',
+                  background: '#00c864', color: '#000', cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.2 }}>VISIBLE ROWS</span>
+                <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.7 }}>{displayData.length} Rows</span>
+              </button>
+              <button
+                onClick={() => {
+                  downloadXLSX(rawData, `${activeTab.replace(/_/g, '_')}.xlsx`);
+                  setShowDownloadDialog(false);
+                }}
+                style={{
+                  flex: 1, padding: '14px 16px', borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.2 }}>ENTIRE TABLE</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

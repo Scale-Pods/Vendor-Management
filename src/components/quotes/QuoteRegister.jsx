@@ -7,10 +7,9 @@ import {
   IconArrowDownRight, IconClipboardList, IconTrendingUp,
   IconCoins, IconCalendar, IconAlertCircle
 } from '@tabler/icons-react';
+import { adminSupabase } from '../../lib/supabase';
 
 const PAGE_SIZE = 10;
-
-const WEBHOOK_URL = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_MASTER_PO}?action=quote`;
 
 const StatusBadge = memo(({ status }) => {
   const styles = {
@@ -123,7 +122,7 @@ const QuoteDashboard = ({ quotes, loading }) => {
               {quotes.slice(0, 5).map((q, idx) => (
                 <div key={q.id || idx} className="flex items-center justify-between px-5 py-4 hover:bg-[rgba(255,255,255,0.02)] transition-colors">
                   <div className="flex items-center gap-4">
-                    <span className="text-[#c8922a] font-black text-xs">{q.id || q['Quote ID'] || '—'}</span>
+                    <span className="text-[#c8922a] font-black text-xs">{q.id || '—'}</span>
                     <div>
                       <p className="text-[12px] text-white font-semibold">{q.material}</p>
                       <p className="text-[10px] text-white/30 font-bold">{q.supplier} · {q.project}</p>
@@ -228,16 +227,16 @@ const QuoteData = ({ quotes, loading }) => {
             <tbody className="divide-y divide-[rgba(255,255,255,0.03)]">
               {paged.map((q, idx) => (
                 <tr key={q.id || idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors group">
-                  <td className="px-5 py-4 text-[#c8922a] font-bold">{q.id || q['Quote ID'] || '—'}</td>
-                  <td className="px-5 py-4 text-white/60 tabular-nums">{q.date || q.Date || '—'}</td>
-                  <td className="px-5 py-4 text-white/80 font-medium max-w-[180px] truncate">{q.supplier || q.Supplier || '—'}</td>
-                  <td className="px-5 py-4 text-white/60 text-[11px] max-w-[140px] truncate">{q.project || q.Project || '—'}</td>
-                  <td className="px-5 py-4 text-white/80 font-semibold max-w-[220px] truncate">{q.material || q.Material || q.Description || '—'}</td>
-                  <td className="px-5 py-4 text-white font-bold tabular-nums text-right">{(q.qty || q.Qty || 0).toLocaleString()}</td>
-                  <td className="px-5 py-4 text-white/40 text-[10px] font-bold uppercase">{q.unit || q.Unit || '—'}</td>
-                  <td className="px-5 py-4 text-white/70 tabular-nums text-right">{(q.rate || q.Rate || 0).toFixed(2)}</td>
-                  <td className="px-5 py-4 text-white font-black tabular-nums text-right">{(q.total || q.Total || 0).toLocaleString()}</td>
-                  <td className="px-5 py-4"><StatusBadge status={q.status || q.Status || 'Pending'} /></td>
+                  <td className="px-5 py-4 text-[#c8922a] font-bold">{q.id || '—'}</td>
+                  <td className="px-5 py-4 text-white/60 tabular-nums">{q.date || '—'}</td>
+                  <td className="px-5 py-4 text-white/80 font-medium max-w-[180px] truncate">{q.supplier || '—'}</td>
+                  <td className="px-5 py-4 text-white/60 text-[11px] max-w-[140px] truncate">{q.project || '—'}</td>
+                  <td className="px-5 py-4 text-white/80 font-semibold max-w-[220px] truncate">{q.material || '—'}</td>
+                  <td className="px-5 py-4 text-white font-bold tabular-nums text-right">{(q.qty || 0).toLocaleString()}</td>
+                  <td className="px-5 py-4 text-white/40 text-[10px] font-bold uppercase">{q.unit || '—'}</td>
+                  <td className="px-5 py-4 text-white/70 tabular-nums text-right">{(q.rate || 0).toFixed(2)}</td>
+                  <td className="px-5 py-4 text-white font-black tabular-nums text-right">{(q.total || 0).toLocaleString()}</td>
+                  <td className="px-5 py-4"><StatusBadge status={q.status || 'Pending'} /></td>
                 </tr>
               ))}
               {paged.length === 0 && (
@@ -270,8 +269,6 @@ const QuoteData = ({ quotes, loading }) => {
   );
 };
 
-
-
 const QuoteUpload = () => (
   <div className="flex flex-col items-center justify-center py-20 glass-panel border-[rgba(255,255,255,0.08)] bg-[rgba(13,17,23,0.4)] rounded-xl">
     <div className="w-20 h-20 rounded-2xl bg-[rgba(200,146,42,0.08)] border-2 border-dashed border-[rgba(200,146,42,0.3)] flex items-center justify-center mb-6">
@@ -299,30 +296,30 @@ const QuoteRegister = ({ subView = 'dashboard' }) => {
   const { data: quotes = [], isLoading: loading, error: queryError } = useQuery({
     queryKey: ['quotes'],
     queryFn: async () => {
-      const response = await fetch(WEBHOOK_URL);
-      if (!response.ok) throw new Error('Failed to fetch quotes');
-      const json = await response.json();
+      const { data, error } = await adminSupabase
+        .from('quote_register')
+        .select('*')
+        .order('id', { ascending: false })
+        .limit(1000000);
 
-      const rawData = Array.isArray(json)
-        ? (json[0]?.data || json)
-        : (json.data || []);
+      if (error) throw new Error(error.message);
 
-      return rawData.map(item => ({
-        id: item['Quote ID'] || item.id || item.ID || `QR-${Math.random().toString(36).slice(2, 6)}`,
-        date: item.Date || item.date || item['Quote Date'] || '—',
-        supplier: item.Supplier || item.supplier || item.Vendor || 'Unknown',
-        project: item.Project || item.project || 'Unknown',
-        material: item.Material || item.material || item.Description || item.item_description || 'Unknown',
-        qty: parseFloat(item.Qty || item.qty || item.Quantity || 0),
-        unit: item.Unit || item.unit || 'Pcs',
-        rate: parseFloat(item.Rate || item.rate || item['Unit Price'] || 0),
-        total: parseFloat(item.Total || item.total || item['Total Price'] || 0),
-        status: item.Status || item.status || 'Pending',
-        validity: item.Validity || item.validity || '—',
-        paymentTerms: item['Payment Terms'] || item.paymentTerms || '—',
+      return (data || []).map(item => ({
+        id: item.id || item.quote_no || `QR-${Math.random().toString(36).slice(2, 6)}`,
+        date: item.entry_date_time || item.pr_date || '—',
+        supplier: item.supplier || 'Unknown',
+        project: item.project || 'Unknown',
+        material: item.description || 'Unknown',
+        qty: parseFloat(item.qty || 0),
+        unit: item.unit || 'Pcs',
+        rate: parseFloat(item.price || 0),
+        total: parseFloat(item.total_price || item.net_amount || 0),
+        status: item.quote_status || item.status || 'Pending',
+        validity: '—',
+        paymentTerms: item.payment_terms || '—',
       }));
     },
-    staleTime: 5 * 60 * 1000, // Keep data fresh for 5 mins
+    staleTime: 5 * 60 * 1000,
   });
 
   const error = queryError?.message || '';
@@ -330,7 +327,6 @@ const QuoteRegister = ({ subView = 'dashboard' }) => {
   const viewMap = {
     dashboard: <QuoteDashboard quotes={quotes} loading={loading} />,
     data: <QuoteData quotes={quotes} loading={loading} />,
-
     upload: <QuoteUpload />,
   };
 
@@ -344,7 +340,6 @@ const QuoteRegister = ({ subView = 'dashboard' }) => {
         <p className="text-[rgba(255,255,255,0.4)] text-sm font-medium mt-1">
           {subView === 'dashboard' && 'Overview of all procurement quotes and material sourcing.'}
           {subView === 'data' && 'Full quote register with filtering and search.'}
-
           {subView === 'upload' && 'Import and manage quote data files.'}
         </p>
       </div>
