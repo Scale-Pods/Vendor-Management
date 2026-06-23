@@ -34,6 +34,8 @@ const Sheets = ({ initialTab, onTabChange }) => {
   const [popover, setPopover] = useState(null);
   const [sortOrder, setSortOrder] = useState('asc');
   const [searchTerm, setSearchTerm] = useState('');
+  const [columnFilters, setColumnFilters] = useState({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
@@ -85,6 +87,22 @@ const Sheets = ({ initialTab, onTabChange }) => {
     return [];
   }, [activeTab, rawData]);
 
+  const supplierCol = useMemo(() => {
+    if (rawData.length) {
+      const k = Object.keys(rawData[0]).find(c => c.toLowerCase().includes('supplier'));
+      if (k) return k;
+    }
+    return activeCols.find(c => c.toLowerCase().includes('supplier'));
+  }, [rawData, activeCols]);
+
+  const projectCol = useMemo(() => {
+    if (rawData.length) {
+      const k = Object.keys(rawData[0]).find(c => c.toLowerCase().includes('project'));
+      if (k) return k;
+    }
+    return activeCols.find(c => c.toLowerCase().includes('project'));
+  }, [rawData, activeCols]);
+
   const sortedData = useMemo(() => {
     if (!rawData.length) return [];
     const data = [...rawData];
@@ -111,15 +129,23 @@ const Sheets = ({ initialTab, onTabChange }) => {
 
   const displayData = useMemo(() => {
     if (loadingAllData || !sortedData.length) return sortedData;
-    if (!searchTerm) return sortedData;
+    if (!searchTerm && !Object.keys(columnFilters).length) return sortedData;
     const lower = searchTerm.toLowerCase();
-    return sortedData.filter(row =>
-      Object.keys(row).some(col => {
+    return sortedData.filter(row => {
+      const matchesSearch = !searchTerm ||
+        Object.keys(row).some(col => {
+          const v = row[col];
+          return v != null && String(v).toLowerCase().includes(lower);
+        });
+      if (!matchesSearch) return false;
+      for (const [col, filterVal] of Object.entries(columnFilters)) {
+        if (!filterVal) continue;
         const v = row[col];
-        return v != null && String(v).toLowerCase().includes(lower);
-      })
-    );
-  }, [sortedData, searchTerm, loadingAllData]);
+        if (v == null || !String(v).toLowerCase().includes(filterVal.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [sortedData, searchTerm, columnFilters, loadingAllData]);
 
   const rowVirtualizer = useVirtualizer({
     count: displayData.length,
@@ -265,6 +291,8 @@ const Sheets = ({ initialTab, onTabChange }) => {
     setActiveTab(tab);
     onTabChange?.(tab);
     setSearchTerm('');
+    setColumnFilters({});
+    setShowAdvanced(false);
     setSelectedCell(null);
     setPopover(null);
     setEditingCell(null);
@@ -385,6 +413,22 @@ const Sheets = ({ initialTab, onTabChange }) => {
           </div>
 
           <button
+            onClick={() => setShowAdvanced(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              fontSize: '9px',
+              fontWeight: 900,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              background: showAdvanced ? 'rgba(200,146,42,0.1)' : 'rgba(255,255,255,0.03)',
+              color: showAdvanced ? '#c8922a' : 'rgba(255,255,255,0.3)',
+              border: `1px solid ${showAdvanced ? 'rgba(200,146,42,0.25)' : 'rgba(255,255,255,0.08)'}`,
+            }}
+          >
+            ADVANCED SEARCH
+          </button>
+
+          <button
             onClick={() => {
               if (loadingAllData) return;
               if (searchTerm && displayData.length < rawData.length) {
@@ -428,6 +472,72 @@ const Sheets = ({ initialTab, onTabChange }) => {
           </button>
         </div>
       </div>
+
+      {showAdvanced && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 0 4px', margin: '0 16px',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>
+            Advanced Filters
+          </span>
+
+          {supplierCol && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+              style={{
+                background: columnFilters[supplierCol] ? 'rgba(200,146,42,0.08)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${columnFilters[supplierCol] ? 'rgba(200,146,42,0.25)' : 'rgba(255,255,255,0.08)'}`,
+              }}>
+              <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                Supplier
+              </span>
+              <input
+                type="text"
+                value={columnFilters[supplierCol] || ''}
+                onChange={(e) => setColumnFilters(prev => ({ ...prev, [supplierCol]: e.target.value }))}
+                placeholder="Type to filter..."
+                style={{
+                  background: 'transparent', border: 'none', outline: 'none',
+                  color: 'rgba(255,255,255,0.8)', fontSize: '11px', fontWeight: 600, width: 120,
+                }}
+              />
+              {columnFilters[supplierCol] && (
+                <button onClick={() => setColumnFilters(prev => { const n = { ...prev }; delete n[supplierCol]; return n; })} style={{ padding: 2, color: 'rgba(255,255,255,0.3)' }}>
+                  <IconX size={12} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {projectCol && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+              style={{
+                background: columnFilters[projectCol] ? 'rgba(200,146,42,0.08)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${columnFilters[projectCol] ? 'rgba(200,146,42,0.25)' : 'rgba(255,255,255,0.08)'}`,
+              }}>
+              <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                Project
+              </span>
+              <input
+                type="text"
+                value={columnFilters[projectCol] || ''}
+                onChange={(e) => setColumnFilters(prev => ({ ...prev, [projectCol]: e.target.value }))}
+                placeholder="Type to filter..."
+                style={{
+                  background: 'transparent', border: 'none', outline: 'none',
+                  color: 'rgba(255,255,255,0.8)', fontSize: '11px', fontWeight: 600, width: 120,
+                }}
+              />
+              {columnFilters[projectCol] && (
+                <button onClick={() => setColumnFilters(prev => { const n = { ...prev }; delete n[projectCol]; return n; })} style={{ padding: 2, color: 'rgba(255,255,255,0.3)' }}>
+                  <IconX size={12} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 overflow-hidden relative">
         {isLoading ? (
