@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { IconMail, IconLock, IconLoader2, IconAlertCircle, IconArrowRight } from '@tabler/icons-react';
+import { IconMail, IconLock, IconLoader2, IconAlertCircle, IconArrowRight, IconEye, IconEyeOff } from '@tabler/icons-react';
 
 const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -101,18 +102,26 @@ const Login = ({ onLogin }) => {
                 <label className="text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.25)] ml-1 transition-colors group-focus-within:text-[#F59E0B]">
                   Security Password
                 </label>
-                <div className="relative">
+                  <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-label group-focus-within:text-[#F59E0B] transition-colors">
                     <IconLock size={18} stroke={1.5} />
                   </div>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full bg-sidebar border border-[rgba(255,255,255,0.08)] rounded-xl py-3.5 pl-11 pr-4 text-[14px] text-white placeholder:text-[rgba(255,255,255,0.15)] focus:ring-2 focus:ring-[#F59E0B]/20 focus:border-[#F59E0B]/40 focus:bg-[rgba(255,255,255,0.05)] transition-all outline-none"
+                    className="block w-full bg-sidebar border border-[rgba(255,255,255,0.08)] rounded-xl py-3.5 pl-11 pr-12 text-[14px] text-white placeholder:text-[rgba(255,255,255,0.15)] focus:ring-2 focus:ring-[#F59E0B]/20 focus:border-[#F59E0B]/40 focus:bg-[rgba(255,255,255,0.05)] transition-all outline-none"
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(p => !p)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.6)] transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <IconEyeOff size={18} stroke={1.5} /> : <IconEye size={18} stroke={1.5} />}
+                  </button>
                 </div>
               </div>
             </div>
