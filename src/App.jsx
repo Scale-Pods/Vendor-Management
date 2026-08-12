@@ -14,9 +14,11 @@ import {
   IconDatabaseImport,
   IconPackage,
   IconUpload,
-  IconClipboardCheck
+  IconClipboardCheck,
+  IconBuildingStore
 } from '@tabler/icons-react';
 import VendorAnalysis from './components/vendors/VendorAnalysis';
+import ContactVendors from './components/vendors/ContactVendors';
 import PRTable from './components/records/PRTable';
 import InsightsPanel from './components/insights/InsightsPanel';
 import Sheets from './components/sheets/Sheets';
@@ -35,7 +37,7 @@ const VALID_PAGES = new Set([
   'po-dashboard', 'polog', 'prlist',
   'review-dashboard', 'review2025', 'review2026',
   'sheets', 'qr-dashboard', 'qr-data', 'qr-material', 'qr-upload',
-  'users', 'records', 'changes', 'vendors', 'insights',
+  'users', 'records', 'changes', 'vendors', 'contact-vendors', 'insights',
 ]);
 
 function getPageFromHash() {
@@ -173,6 +175,7 @@ const App = () => {
     { id: 'qr-data', label: 'Data', icon: IconClipboardList },
     { id: 'qr-material', label: 'Material', icon: IconPackage },
     { id: 'qr-upload', label: 'Upload Data', icon: IconUpload, restricted: true },
+    { id: 'contact-vendors', label: 'Contact Vendors', icon: IconBuildingStore },
   ];
 
   const [expandedGroups, setExpandedGroups] = useState({
@@ -495,6 +498,9 @@ const App = () => {
 
           {/* Admin */}
           {activeTab === 'users' && isAdmin && <UserManagement />}
+
+          {/* Contact Vendors */}
+          {activeTab === 'contact-vendors' && <ContactVendors />}
 
           {/* Legacy routes */}
           {activeTab === 'records' && <PRTable />}
