@@ -9,6 +9,7 @@ import {
 } from '@tabler/icons-react';
 import BoxLoader from '../ui/BoxLoader';
 import { SearchBar } from '../ui/search-bar';
+import { adminSupabase as supabase } from '../../lib/supabase';
 
 const ReviewYear = ({ year, action, onAuditSelect }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,11 +19,45 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
   const { data = [], isLoading: loading } = useQuery({
     queryKey: ['review-year', action],
     queryFn: async () => {
-      const response = await fetch(`/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_REVIEW_YEAR}?action=${action}`);
+      const tableByAction = { '25': 'pr_data_25', '26': 'pr_data_26' };
+      const table = tableByAction[String(action)] || (String(year).includes('25') ? 'pr_data_25' : 'pr_data_26');
+
+      // Prefer Supabase table data (reliable/local to app data)
+      try {
+        const all = [];
+        const size = 1000;
+        let start = 0;
+        while (true) {
+          const { data: rows, error } = await supabase
+            .from(table)
+            .select('*')
+            .range(start, start + size - 1);
+          if (error) throw error;
+          if (!rows || rows.length === 0) break;
+          all.push(...rows);
+          if (rows.length < size) break;
+          start += size;
+        }
+
+        if (all.length > 0) {
+          return all.map(item => ({
+            ...item,
+            PR: item.PR || item.pr || item.PR_No || item.pr_no || 'N/A',
+            Project: item.Project || item.project || 'N/A',
+          }));
+        }
+      } catch (e) {
+        // fall through to webhook if table fetch fails/empty
+        console.warn('ReviewYear supabase fetch failed, falling back to webhook:', e?.message || e);
+      }
+
+      const webhookId = import.meta.env.VITE_N8N_WEBHOOK_REVIEW_YEAR;
+      if (!webhookId) return [];
+      const response = await fetch(`/api/n8n/webhook/${webhookId}?action=${action}`);
       if (!response.ok) throw new Error('Failed to fetch review data');
       const result = await response.json();
-      const data = Array.isArray(result) ? result : (result.data || []);
-      return data.map(item => ({
+      const list = Array.isArray(result) ? result : (result.data || []);
+      return list.map(item => ({
         ...item,
         PR: item.PR || item.pr || item.PR_No || 'N/A',
         Project: item.Project || item.project || 'N/A',
@@ -113,7 +148,7 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                   <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider w-8 sm:w-10"></th>
                   <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">PR Number</th>
                   <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider">Project</th>
-                  <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider hidden sm:table-cell">Items</th>
+                  <th className="px-4 sm:px-6 py-3 sm:py-4 text-[10px] font-black text-[rgba(255,255,255,0.3)] uppercase tracking-wider hidden sm:table-cell">Records</th>
                   <th className="px-4 sm:px-6 py-3 sm:py-4 text-right"></th>
                 </tr>
               </thead>
@@ -130,9 +165,7 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                   </tr>
                 ) : (
                   filteredGroups.map((group) => {
-                    const materialItems = group.items.filter(item =>
-                      item.Description || item.description || item['Material'] || item.material
-                    );
+                    const displayItems = group.items;
                     return (
                     <Fragment key={group.PR}>
                       <tr 
@@ -154,7 +187,7 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                         </td>
                         <td className="px-4 sm:px-6 py-4 sm:py-5 text-[13px] text-[rgba(255,255,255,0.65)] font-medium max-w-[120px] sm:max-w-xs truncate">{group.Project}</td>
                         <td className="px-4 sm:px-6 py-4 sm:py-5 hidden sm:table-cell">
-                          <span className="text-xs font-bold text-[#F59E0B]">{materialItems.length} material{materialItems.length !== 1 ? 's' : ''}</span>
+                          <span className="text-xs font-bold text-[#F59E0B]">{displayItems.length} record{displayItems.length !== 1 ? 's' : ''}</span>
                         </td>
                         <td className="px-4 sm:px-6 py-4 sm:py-5 text-right">
                           <button 
@@ -180,36 +213,50 @@ const ReviewYear = ({ year, action, onAuditSelect }) => {
                                 </div>
                               </div>
                             )}
-                            <table className="w-full">
-                              <thead>
-                                  <tr className="border-b border-t border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)]">
-                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider w-8 sm:w-10"></th>
-                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">#</th>
-                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Description</th>
-                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Prev.</th>
-                                    <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Curr.</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[rgba(255,255,255,0.02)]">
-                                {materialItems.map((item, idx) => (
-                                  <tr key={idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors">
-                                    <td className="px-4 sm:px-6 py-2.5"></td>
-                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.4)] font-mono">
-                                      {item['Sr.No'] || item.Sr_No || item.sr_no || item['SR NO'] || idx + 1}
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)] max-w-[150px] sm:max-w-xs truncate">
-                                      {item.Description || item.description || item['Material'] || item.material || '-'}
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.5)]">
-                                      {item['Previous Charges'] ?? item.Previous_Charges ?? item.previous_charges ?? group.previousCharges ?? '-'}
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)]">
-                                      {item['Current Charges'] ?? item.Current_Charges ?? item.current_charges ?? group.currentCharges ?? '-'}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            <div className="overflow-x-auto">
+                              <table className="w-full min-w-[900px]">
+                                <thead>
+                                    <tr className="border-b border-t border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)]">
+                                      <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider w-12">Sr No</th>
+                                      <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Project</th>
+                                      <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">PR</th>
+                                      <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Previous Charges</th>
+                                      <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Current Charges</th>
+                                      <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Remark</th>
+                                      <th className="px-4 sm:px-6 py-2 text-[9px] font-black text-[rgba(255,255,255,0.2)] uppercase tracking-wider">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[rgba(255,255,255,0.02)]">
+                                  {displayItems.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors">
+                                      <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.4)] font-mono">
+                                        {item['Sr.No'] ?? item.Sr_No ?? item.sr_no ?? item['SR NO'] ?? idx + 1}
+                                      </td>
+                                      <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)] max-w-[180px] truncate" title={item.Project || item.project || group.Project || ''}>
+                                        {item.Project || item.project || group.Project || '-'}
+                                      </td>
+                                      <td className="px-4 sm:px-6 py-2.5 text-xs text-white font-semibold">
+                                        {item.PR || item.pr || item.PR_No || item.pr_no || group.PR || '-'}
+                                      </td>
+                                      <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.6)]">
+                                        {item['Previous Charges'] ?? item.Previous_Charges ?? item.previous_charges ?? '-'}
+                                      </td>
+                                      <td className="px-4 sm:px-6 py-2.5 text-xs text-[#F59E0B] font-semibold">
+                                        {item['Current Charges'] ?? item.Current_Charges ?? item.current_charges ?? '-'}
+                                      </td>
+                                      <td className="px-4 sm:px-6 py-2.5 text-xs text-[rgba(255,255,255,0.7)] max-w-[360px]" title={item.remark || item.Remark || item.remarks || item.Remarks || ''}>
+                                        {item.remark || item.Remark || item.remarks || item.Remarks || '-'}
+                                      </td>
+                                      <td className="px-4 sm:px-6 py-2.5 text-xs">
+                                        <span className="inline-flex px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[rgba(255,255,255,0.8)] font-semibold">
+                                          {item.status || item.Status || '-'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </td>
                         </tr>
                       )}
