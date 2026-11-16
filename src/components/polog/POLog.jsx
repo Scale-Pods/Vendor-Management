@@ -32,6 +32,17 @@ import {
 import { BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import BoxLoader from '../ui/BoxLoader';
 import { adminSupabase } from '../../lib/supabase';
+import {
+  getPriceHistory,
+  getCurrentVersion,
+  getCurrentAmounts,
+  getVersionAmounts,
+  getOriginalTotal,
+  getLatestTotal as getHistoryLatestTotal,
+  getCurrentSupplier,
+  getCurrentDescription,
+  toNumber,
+} from '../../utils/priceHistory';
 
 
 const PO_COLUMNS = [
@@ -109,6 +120,168 @@ const COMPARE_WEBHOOK = `/api/n8n/webhook/${import.meta.env.VITE_N8N_WEBHOOK_PO_
 
 const PAGE_SIZE = 9;
 
+/* ─── Price-source helpers (purchase_orders is authoritative) ─── */
+const PR_FIELDS = ['PR', 'pr', 'PR_No', 'pr_no', 'PR_Number', 'pr_number', 'PR No', 'Req Ref', 'Req_Ref', 'req_ref'];
+const SR_FIELDS = ['Sr_No', 'sr_no', 'Sr.No', 'Sr No', 'srNo', 'Seq #', 'Seq#'];
+const DESCRIPTION_FIELDS = ['Description', 'description', 'current_description', 'Item Description', 'item_description', 'Material', 'material', 'desc'];
+const PROJECT_FIELDS = ['Project', 'project', 'Project Name', 'project_name'];
+
+const getRowField = (row, fields) => {
+  if (!row) return '';
+  for (const field of fields) {
+    const value = row[field];
+    if (value !== null && value !== undefined && String(value).trim() !== '') return value;
+  }
+  return '';
+};
+
+const getRowPr = (row) => getRowField(row, PR_FIELDS);
+const getRowProject = (row) => getRowField(row, PROJECT_FIELDS);
+const getRowDescription = (row) => getRowField(row, DESCRIPTION_FIELDS);
+
+const getRowSr = (row) => {
+  const raw = getRowField(row, SR_FIELDS);
+  if (raw === '') return '';
+  const text = String(raw).trim();
+  const numeric = Number(text.replace(/,/g, ''));
+  return Number.isFinite(numeric) ? String(numeric) : text.toUpperCase();
+};
+
+const normalizePrKey = (value) => {
+  if (value === null || value === undefined) return '';
+  let key = String(value).trim().toUpperCase().replace(/[\s\u00A0]+/g, '');
+  if (!key) return '';
+  key = key.replace(/^PR[-\s]?/, 'PR-');
+  if (!key.startsWith('PR-')) key = `PR-${key}`;
+  // Treat PR-04776 and PR-4776 as the same request.
+  return key.replace(/(^|-)0+(\d+)/g, '$1$2');
+};
+
+const normalizeDescriptionKey = (value) =>
+  String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:]+$/g, '');
+
+const formatMoney = (value) => {
+  const parsed = typeof value === 'number'
+    ? value
+    : parseFloat(String(value ?? '').replace(/,/g, ''));
+  if (!Number.isFinite(parsed)) return '0.00';
+  return parsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const isPurchaseOrderRow = (row) =>
+  row?._source === 'purchase_orders' ||
+  row?.current_price != null ||
+  row?.current_total != null ||
+  row?.current_rate != null ||
+  (!row?._source && row?.UOM != null && (row?.Sr_No != null || row?.PR != null));
+
+/**
+ * Sums the current monetary values of one or more purchase_orders rows.
+ * Duplicate PR + Sr_No rows are ignored so revisions are never double counted.
+ */
+const summarizePurchaseOrderRows = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const seen = new Set();
+  let net = 0;
+  let vat = 0;
+  let total = 0;
+  let original = 0;
+  let count = 0;
+  const suppliers = new Set();
+  const projects = new Set();
+
+  rows.forEach((row, index) => {
+    const amounts = getCurrentAmounts(row);
+    if (!amounts) return;
+
+    const key = `${normalizePrKey(getRowPr(row))}::${getRowSr(row) || normalizeDescriptionKey(getRowDescription(row)) || index}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    net += amounts.price || 0;
+    vat += amounts.vat || 0;
+    total += amounts.total || 0;
+
+    // Compare like with like: the baseline price (pre-VAT) against the current
+    // net price. Fall back to the original total for legacy rows.
+    const history = getPriceHistory(row);
+    const baseline = history[0];
+    const baselinePrice = toNumber(baseline?.price) ?? toNumber(baseline?.total) ?? getOriginalTotal(row);
+    original += Number.isFinite(baselinePrice) ? baselinePrice : (amounts.price || 0);
+    count += 1;
+
+    const supplier = getCurrentSupplier(row);
+    if (supplier && supplier !== 'Unknown') suppliers.add(supplier);
+
+    const project = getRowProject(row);
+    if (project) projects.add(String(project).trim());
+  });
+
+  if (count === 0) return null;
+
+  return {
+    net,
+    vat,
+    total,
+    original,
+    count,
+    suppliers,
+    projects,
+    supplier: suppliers.size === 1 ? [...suppliers][0] : '',
+    project: projects.size === 1 ? [...projects][0] : '',
+  };
+};
+
+const buildPurchaseOrderIndex = (rows) => {
+  const byKey = new Map();
+  const byPr = new Map();
+
+  (rows || []).forEach((row) => {
+    const pr = normalizePrKey(getRowPr(row));
+    if (!pr) return;
+
+    const sr = getRowSr(row);
+    const desc = normalizeDescriptionKey(getRowDescription(row));
+
+    if (sr) byKey.set(`${pr}::${sr}`, row);
+    if (desc) {
+      const descKey = `${pr}::${desc}`;
+      if (!byKey.has(descKey)) byKey.set(descKey, row);
+    }
+
+    if (!byPr.has(pr)) byPr.set(pr, []);
+    byPr.get(pr).push(row);
+  });
+
+  return { byKey, byPr };
+};
+
+const findPurchaseOrderMatch = (item, index) => {
+  if (!index) return null;
+
+  const pr = normalizePrKey(getRowPr(item));
+  if (!pr) return null;
+
+  const sr = getRowSr(item);
+  if (sr) {
+    const match = index.byKey.get(`${pr}::${sr}`);
+    if (match) return match;
+  }
+
+  const desc = normalizeDescriptionKey(getRowDescription(item));
+  if (!desc) return null;
+
+  const exact = index.byKey.get(`${pr}::${desc}`);
+  if (exact) return exact;
+
+  const candidates = index.byPr.get(pr) || [];
+  return candidates.find((candidate) => {
+    const candidateDesc = normalizeDescriptionKey(getRowDescription(candidate));
+    return candidateDesc && (candidateDesc.startsWith(desc) || desc.startsWith(candidateDesc));
+  }) || null;
+};
+
 /* â”€â”€â”€ Toast Component â”€â”€â”€ */
 const Toast = ({ message, type, onClose }) => {
   useEffect(() => {
@@ -134,17 +307,26 @@ const Toast = ({ message, type, onClose }) => {
 };
 
 /* â”€â”€â”€ Webhook PR Insight Sub-components â”€â”€â”€ */
-const POLogCard = ({ row }) => {
+const POLogCard = ({ row, financials }) => {
   const ref = (row.Ref || 'N/A').replace(' (View Doc)', '');
   const status = row.Status || 'Open';
-  const project = row.Project || 'N/A';
+  const project = row.Project || row.project || 'N/A';
   const company = row.Company || 'N/A';
-  const supplier = row.Supplier || 'N/A';
+  const supplier = row._supplierFromPurchaseOrders || row.Supplier || row.supplier || 'N/A';
   const reqRef = row['Req Ref'] || row.Req_Ref || 'N/A';
   const qcRef = row['QC Ref.'] || row.QC_Ref || 'N/A';
   const month = row.Month || 'N/A';
-  
-  const hasOriginalPrice = row['Original Pirce'] || row['Original Price'];
+
+  const netPrice = financials ? formatMoney(financials.net) : formatMoney(row['Net Price']);
+  const vatPrice = financials ? formatMoney(financials.vat) : formatMoney(row.VAT);
+  const totalPrice = financials ? formatMoney(financials.total) : formatMoney(row['Total Price']);
+
+  const rawOriginal = financials?.original > 0
+    ? financials.original
+    : (row._originalTotal > 0 ? row._originalTotal : (row['Original Pirce'] || row['Original Price']));
+  const originalPrice = rawOriginal ? formatMoney(rawOriginal) : '';
+  const hasChangeHistory = getPriceHistory(row).length > 1;
+  const hasOriginalPrice = hasChangeHistory && originalPrice !== '' && originalPrice !== netPrice;
 
   return (
     <div className="bg-[#121824] border-card rounded-2xl p-6 space-y-4 hover:border-[#F59E0B] hover:shadow-[0_0_15px_rgba(245,158,11,0.08)] transition-all duration-300">
@@ -201,25 +383,25 @@ const POLogCard = ({ row }) => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 pt-2">
         <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl p-2 flex sm:flex-col justify-between sm:justify-center items-center text-[#F59E0B]">
           <p className="text-[8px] font-extrabold uppercase opacity-60">Net</p>
-          <p className="text-[11px] font-black">{row['Net Price'] || '0.00'}</p>
+          <p className="text-[11px] font-black">{netPrice}</p>
         </div>
         <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl p-2 flex sm:flex-col justify-between sm:justify-center items-center text-[#F59E0B]">
           <p className="text-[8px] font-extrabold uppercase opacity-60">VAT</p>
-          <p className="text-[11px] font-black">{row.VAT || '0.00'}</p>
+          <p className="text-[11px] font-black">{vatPrice}</p>
         </div>
         <div className="bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.25)] rounded-xl p-2 flex sm:flex-col justify-between sm:justify-center items-center text-[#F59E0B] shadow-inner">
           <p className="text-[8px] font-extrabold uppercase opacity-80">Total</p>
-          <p className="text-[11px] font-black">{row['Total Price'] || '0.00'}</p>
+          <p className="text-[11px] font-black">{totalPrice}</p>
         </div>
       </div>
 
       {/* Price comparison extra row */}
-      {hasOriginalPrice && row['Net Price'] && (
+      {hasOriginalPrice && (
         <div className="text-[10px] text-[rgba(255,255,255,0.4)] flex items-center gap-1.5 bg-[#090e17] px-3 py-1.5 rounded-xl border border-[rgba(255,255,255,0.03)] w-fit mt-1">
           <span className="font-extrabold text-[#F59E0B] uppercase text-[8px]">Comparison:</span>
-          <span className="line-through">AED {hasOriginalPrice}</span>
+          <span className="line-through">AED {originalPrice}</span>
           <span className="text-[#F59E0B]">&rarr;</span>
-          <span className="text-white font-bold">AED {row['Net Price']}</span>
+          <span className="text-white font-bold">AED {netPrice}</span>
         </div>
       )}
     </div>
@@ -229,11 +411,12 @@ const POLogCard = ({ row }) => {
 const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const versions = extractVersions(row);
-  const pr = row.PR || row.PR_No || 'N/A';
-  const srNo = row['Sr.No'] || row.Sr_No || '1';
-  const project = row.Project || 'N/A';
-  const desc = row.Description || row.description || 'No description';
-  const supplier = versions.length > 0 ? versions[versions.length - 1].supplier : 'N/A';
+  const pr = getRowPr(row) || 'N/A';
+  const srNo = getRowSr(row) || '1';
+  const project = getRowProject(row) || 'N/A';
+  const desc = getCurrentDescription(row) || getRowDescription(row) || 'No description';
+  const supplier = getCurrentSupplier(row);
+  const amounts = getCurrentAmounts(row);
 
   return (
     <div className="bg-[#121824] border-card rounded-2xl p-6 space-y-4 hover:border-[#F59E0B] transition-all duration-300">
@@ -279,8 +462,8 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
         </p>
       </div>
 
-      {/* Versions Table */}
-      {versions.length > 0 && (
+      {/* Versions Table - show previous values only when change history exists */}
+      {versions.length > 1 ? (
         <div className="overflow-x-auto border border-[rgba(255,255,255,0.05)] rounded-xl bg-[#090e17]">
           <table className="w-full text-left border-collapse text-[11px]">
             <thead>
@@ -309,6 +492,25 @@ const PurchaseOrderCard = ({ row, renderCell, extractVersions }) => {
               })}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <p className="text-[10px] text-[rgba(255,255,255,0.35)] font-medium italic">No previous changes recorded yet.</p>
+      )}
+
+      {amounts && (
+        <div className="grid grid-cols-3 gap-2 pt-1">
+          <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl px-3 py-2 text-[#F59E0B]">
+            <p className="text-[8px] font-extrabold uppercase opacity-60">Net</p>
+            <p className="text-[11px] font-black">{formatMoney(amounts.price)}</p>
+          </div>
+          <div className="bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.1)] rounded-xl px-3 py-2 text-[#F59E0B]">
+            <p className="text-[8px] font-extrabold uppercase opacity-60">VAT</p>
+            <p className="text-[11px] font-black">{formatMoney(amounts.vat)}</p>
+          </div>
+          <div className="bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.25)] rounded-xl px-3 py-2 text-[#F59E0B] shadow-inner">
+            <p className="text-[8px] font-extrabold uppercase opacity-80">Total</p>
+            <p className="text-[11px] font-black">{formatMoney(amounts.total)}</p>
+          </div>
         </div>
       )}
     </div>
@@ -402,6 +604,71 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // purchase_orders is the authoritative price table: every price shown in the
+  // PR list, material cards, modal and dashboard is resolved from current_*.
+  const { data: purchaseOrdersData = [], isLoading: purchaseOrdersLoading } = useQuery({
+    queryKey: ['purchase-order-data'],
+    queryFn: async () => {
+      const all = [];
+      const size = 1000;
+      let start = 0;
+
+      while (true) {
+        const { data, error } = await adminSupabase
+          .from('purchase_orders')
+          .select('*')
+          .order('PR', { ascending: true })
+          .order('Sr_No', { ascending: true })
+          .range(start, start + size - 1);
+
+        if (error) {
+          console.warn('Unable to load purchase_orders:', error.message);
+          break;
+        }
+        if (!data || data.length === 0) break;
+
+        all.push(...data);
+        if (data.length < size) break;
+        start += size;
+      }
+
+      return all;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Guard against duplicate rows for the same PR line (revision imports).
+  const dedupedPurchaseOrders = useMemo(() => {
+    const seen = new Set();
+
+    return purchaseOrdersData.filter((row, index) => {
+      if (!row) return false;
+      const key = `${normalizePrKey(getRowPr(row))}::${getRowSr(row) || normalizeDescriptionKey(getRowDescription(row)) || index}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [purchaseOrdersData]);
+
+  const purchaseOrderTotalsByPr = useMemo(() => {
+    const grouped = new Map();
+
+    dedupedPurchaseOrders.forEach((row) => {
+      const key = normalizePrKey(getRowPr(row));
+      if (!key) return;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(row);
+    });
+
+    const totals = new Map();
+    grouped.forEach((rows, key) => {
+      const summary = summarizePurchaseOrderRows(rows);
+      if (summary) totals.set(key, summary);
+    });
+
+    return totals;
+  }, [dedupedPurchaseOrders]);
+
   const fetchLogData = () => queryClient.invalidateQueries({ queryKey: ['po-log-data'] });
   const [logSearch, setLogSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState('All');
@@ -425,8 +692,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     setParsedRows(prevRows => {
       let changed = false;
       const nextRows = prevRows.map(row => {
-        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
-        const summaryKey = Object.keys(rateSummaryMap).find(k => k.trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === pr);
+        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
+        const summaryKey = Object.keys(rateSummaryMap).find(k => k.trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-') === pr);
         
         if (summaryKey && rateSummaryMap[summaryKey]) {
           const summary = rateSummaryMap[summaryKey];
@@ -449,8 +716,36 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     });
   }, [rateSummaryMap, parsedRows.length]);
 
-  const netPriceStr = selectedCard ? (selectedCard['Net Price'] || '0.00') : '0.00';
-  const originalPriceStr = selectedCard ? (selectedCard['Original Pirce'] || selectedCard['Original Price'] || '0.00') : '0.00';
+  // PR-level financials come from purchase_orders current_* values; fall back
+  // to the PO log row only when the selected PR has no purchase-order rows.
+  const purchaseOrderFinancials = useMemo(() => {
+    if (!selectedCard) return null;
+
+    // Same source as the cards: the purchase_orders table first, then the
+    // PR-detail webhook rows when the table has no match for this PR.
+    const tableTotals = purchaseOrderTotalsByPr.get(normalizePrKey(selectedCard.Ref));
+    if (tableTotals) return tableTotals;
+
+    const details = prDetails[selectedCard.Ref];
+    if (!Array.isArray(details) || details.length === 0) return null;
+
+    return summarizePurchaseOrderRows(details.filter(isPurchaseOrderRow));
+  }, [selectedCard, prDetails, purchaseOrderTotalsByPr]);
+
+  const netPriceStr = purchaseOrderFinancials
+    ? formatMoney(purchaseOrderFinancials.net)
+    : selectedCard ? formatMoney(selectedCard['Net Price']) : '0.00';
+  const vatPriceStr = purchaseOrderFinancials
+    ? formatMoney(purchaseOrderFinancials.vat)
+    : selectedCard ? formatMoney(selectedCard.VAT) : '0.00';
+  const totalPriceStr = purchaseOrderFinancials
+    ? formatMoney(purchaseOrderFinancials.total)
+    : selectedCard ? formatMoney(selectedCard['Total Price']) : '0.00';
+  const originalPriceStr = purchaseOrderFinancials?.original > 0
+    ? formatMoney(purchaseOrderFinancials.original)
+    : selectedCard
+      ? formatMoney(selectedCard['Original Pirce'] || selectedCard['Original Price'])
+      : '0.00';
   
   const netVal = parseFloat(String(netPriceStr).replace(/,/g, '')) || 0;
   const origVal = parseFloat(String(originalPriceStr).replace(/,/g, '')) || 0;
@@ -474,23 +769,34 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     setPrLoading(prev => ({ ...prev, [ref]: true }));
     setPrError(prev => ({ ...prev, [ref]: null }));
 
+    const normPr = String(prRef).trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
+    const prNoDash = normPr.replace(/^PR-/i, 'PR');
+    const prVariants = [...new Set([prRef, normPr, prNoDash, String(prRef).trim()])].filter(Boolean);
+
     try {
+      const fetchByPr = async (table, col) => {
+        for (const v of prVariants) {
+          const res = await adminSupabase.from(table).select('*').eq(col, v);
+          if (res.error) throw new Error(res.error.message);
+          if (res.data && res.data.length) return res.data;
+        }
+        return [];
+      };
+
       const [mat25, mat26, pd25, pd26, poTbl] = await Promise.all([
-        adminSupabase.from('material_detail_25').select('*').eq('PR', prRef),
-        adminSupabase.from('material_detail_26').select('*').eq('pr', prRef),
-        adminSupabase.from('pr_data_25').select('*').eq('PR', prRef),
-        adminSupabase.from('pr_data_26').select('*').eq('pr', prRef),
-        adminSupabase.from('purchase_orders').select('*').eq('PR', prRef),
+        fetchByPr('material_detail_25', 'PR'),
+        fetchByPr('material_detail_26', 'pr'),
+        fetchByPr('pr_data_25', 'PR'),
+        fetchByPr('pr_data_26', 'pr'),
+        fetchByPr('purchase_orders', 'PR'),
       ]);
-      const err = mat25.error || mat26.error || pd25.error || pd26.error || poTbl.error;
-      if (err) throw new Error(err.message);
 
       const allRows = [
-        ...(mat25.data || []),
-        ...(mat26.data || []),
-        ...(pd25.data || []),
-        ...(pd26.data || []),
-        ...(poTbl.data || []),
+        ...(mat25 || []).map(r => ({ ...r, _source: 'material_detail_25' })),
+        ...(mat26 || []).map(r => ({ ...r, _source: 'material_detail_26' })),
+        ...(pd25 || []).map(r => ({ ...r, _source: 'pr_data_25' })),
+        ...(pd26 || []).map(r => ({ ...r, _source: 'pr_data_26' })),
+        ...(poTbl || []).map(r => ({ ...r, _source: 'purchase_orders' })),
       ];
 
       setPrDetails(prev => ({ ...prev, [ref]: allRows.length ? allRows : { message: 'No detail data found for this PR.' } }));
@@ -520,49 +826,48 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   };
 
   const extractVersions = (row) => {
-    const versions = [];
-    const desc = row.Description || row.description || '';
-    let hasChange1 = false;
+    // `getPriceHistory` returns oldest → newest with `current_*` last.
+    // change1 is the price before current, change2 before change1, etc.
+    const history = getPriceHistory(row);
 
-    // Collect all Change 1-20
-    for (let i = 1; i <= 20; i++) {
-      const hasAnyChange = Object.keys(row).some(key => key.startsWith(`change${i}_`) && row[key] != null && row[key] !== '');
-      if (hasAnyChange) {
-        if (i === 1) hasChange1 = true;
-        versions.push({
-          version: i === 1 ? 'Baseline' : `Version ${i - 1}`,
-          qty: row[`change${i}_qty`] || row[`change${i}_Qty`] || '0.00',
-          rate: row[`change${i}_rate`] || row[`change${i}_Rate`] || '0.00',
-          price: row[`change${i}_price`] || row[`change${i}_Price`] || '0.00',
-          vat: row[`change${i}_vat`] || row[`change${i}_Vat`] || '0.00',
-          total: row[`change${i}_total`] || row[`change${i}_Total`] || '0.00',
-          supplier: row[`change${i}_supplier`] || row[`change${i}_Supplier`] || 'N/A',
-          desc: row[`change${i}_description`] || row[`change${i}_Description`] || desc
-        });
-      }
+    if (history.length > 0) {
+      return history.map((entry) => {
+        const amounts = getVersionAmounts(entry);
+        return {
+          version: entry.label,
+          qty: entry.qty || '0.00',
+          rate: entry.rate || '0.00',
+          price: amounts?.price != null ? amounts.price : '0.00',
+          vat: amounts?.vat != null ? amounts.vat : '0.00',
+          total: amounts?.total != null ? amounts.total : '0.00',
+          supplier: entry.supplier || 'N/A',
+          desc: entry.description || row.Description || row.description || '',
+          date: entry.date || '',
+        };
+      });
     }
 
-    // Fallback if no change1_ exists (for backwards compatibility with generic fields)
-    if (!hasChange1) {
-      const qty = row.Req_Qty || row.ReqQty || row.Qty || row.qty;
-      const rate = row.Rate || row.rate;
-      const price = row.Price || row.price;
-      const vat = row.VAT || row.vat;
-      const total = row.Total || row.total;
-      const supplier = row.Supplier || row.supplier;
+    // Fallback if no current_/change_ versions exist (generic PO fields)
+    const versions = [];
+    const desc = row.Description || row.description || '';
+    const qty = row.Req_Qty || row.ReqQty || row.Qty || row.qty;
+    const rate = row.Rate || row.rate;
+    const price = row.Price || row.price;
+    const vat = row.VAT || row.vat;
+    const total = row.Total || row.total;
+    const supplier = row.Supplier || row.supplier;
 
-      if (qty != null || rate != null || price != null) {
-        versions.unshift({
-          version: 'Baseline',
-          qty: qty || '0.00',
-          rate: rate || '0.00',
-          price: price || '0.00',
-          vat: vat || '0.00',
-          total: total || '0.00',
-          supplier: supplier || 'N/A',
-          desc
-        });
-      }
+    if (qty != null || rate != null || price != null) {
+      versions.push({
+        version: 'Current',
+        qty: qty || '0.00',
+        rate: rate || '0.00',
+        price: price || '0.00',
+        vat: vat || '0.00',
+        total: total || '0.00',
+        supplier: supplier || 'N/A',
+        desc,
+      });
     }
 
     return versions;
@@ -680,12 +985,12 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     const rawItems = normalizeData(data);
     if (rawItems.length === 0) return <span>No data logs found</span>;
     
-    let logsCount = 0;
-    let ordersCount = 0;
-    rawItems.forEach(item => {
-      if (item.Ref) logsCount++;
-      else ordersCount++;
-    });
+    const hasSourceInfo = rawItems.some(item => item && item._source);
+    const logsCount = rawItems.filter(item => item.Ref || item.ref || item.Reference || item.reference).length;
+    const poMaterialItems = hasSourceInfo
+      ? rawItems.filter(item => item._source === 'purchase_orders')
+      : rawItems.filter(item => !(item.Ref || item.ref || item.Reference || item.reference));
+    const ordersCount = poMaterialItems.length;
 
     return (
       <div className="space-y-1">
@@ -712,6 +1017,9 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       // Prioritize items with remark/status as metadata or PO logs
       if (item.Ref || item.ref || item.Reference || item.reference) {
         poLogs.push(item);
+      } else if (item._source === 'pr_data_25' || item._source === 'pr_data_26') {
+        // PR-level summary/remark rows (not material line items)
+        poLogs.push(item);
       } else if (item.PR || item.pr || item.PR_No || item.pr_no || item.PR_Number || item.pr_number || item['PR No'] || item.Req_Ref || item.req_ref || item['Req Ref']) {
         purchaseOrders.push(item);
       } else if (item.remark || item.Remark || item.remarks || item.Remarks) {
@@ -726,68 +1034,138 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       }
     });
 
+    // purchase_orders is the authoritative price source. First pull the real
+    // table rows for the PRs in this payload, then only fall back to webhook
+    // rows for lines the table does not have.
+    const webhookPoRows = purchaseOrders.filter(
+      (item) => item._source === 'purchase_orders' || isPurchaseOrderRow(item),
+    );
+    const payloadPrKeys = new Set(
+      [...poLogs, ...purchaseOrders]
+        .map((row) => normalizePrKey(getRowPr(row)))
+        .filter(Boolean),
+    );
+    if (selectedCard) {
+      const selectedPr = normalizePrKey(selectedCard['Req Ref'] || selectedCard.Ref);
+      if (selectedPr) payloadPrKeys.add(selectedPr);
+    }
+    const tablePurchaseOrders = dedupedPurchaseOrders.filter((row) =>
+      payloadPrKeys.has(normalizePrKey(getRowPr(row))),
+    );
+
+    const canonicalPurchaseOrders = [...tablePurchaseOrders];
+    const canonicalIndex = buildPurchaseOrderIndex(canonicalPurchaseOrders);
+    webhookPoRows.forEach((row) => {
+      if (!findPurchaseOrderMatch(row, canonicalIndex)) {
+        canonicalPurchaseOrders.push(row);
+      }
+    });
+
+    const materialItems = [];
+    const seenMaterialKeys = new Set();
+
+    const addMaterialItem = (item, isTableRow, match) => {
+      const source = match || item;
+      const prKey = normalizePrKey(getRowPr(source) || getRowPr(item));
+      const srKey = getRowSr(source) || getRowSr(item);
+      const descKey = normalizeDescriptionKey(getRowDescription(source) || getRowDescription(item));
+      const dedupeKey = `${prKey}::${srKey || descKey || materialItems.length}`;
+      if (seenMaterialKeys.has(dedupeKey)) return;
+      seenMaterialKeys.add(dedupeKey);
+
+      if (isTableRow) {
+        materialItems.push({ ...source });
+      } else if (match && match !== item) {
+        materialItems.push({
+          ...item,
+          ...match,
+          // Prices/versions come from purchase_orders; identity stays with the
+          // material row so cards keep their original PR/project/description.
+          PR: getRowPr(item) || getRowPr(match),
+          Sr_No: getRowSr(item) || getRowSr(match),
+          Project: getRowProject(item) || getRowProject(match),
+          Description: getRowDescription(item) || getRowDescription(match),
+        });
+      } else {
+        materialItems.push({ ...item });
+      }
+    };
+
+    tablePurchaseOrders.forEach((row) => addMaterialItem(row, true, null));
+    purchaseOrders.forEach((item) => {
+      const isPoSource = item._source === 'purchase_orders' || isPurchaseOrderRow(item);
+      const match = isPoSource ? item : findPurchaseOrderMatch(item, canonicalIndex);
+      addMaterialItem(item, false, match);
+    });
+
+    // One aggregate per PR so every PO log card shows the real net/VAT/total
+    // coming from that PR's purchase_orders rows (not a global total).
+    const poFinancialsByPr = {};
+    Object.entries(
+      canonicalPurchaseOrders.reduce((acc, row) => {
+        const pr = normalizePrKey(getRowPr(row)) || 'N/A';
+        if (!acc[pr]) acc[pr] = [];
+        acc[pr].push(row);
+        return acc;
+      }, {}),
+    ).forEach(([pr, rows]) => {
+      const summary = summarizePurchaseOrderRows(rows);
+      if (summary) poFinancialsByPr[pr] = summary;
+    });
+
     // Group PO logs by PR
     const poLogsGrouped = poLogs.reduce((acc, row) => {
-      const pr = row['Req Ref'] || row.Req_Ref || 'N/A';
+      const pr = normalizePrKey(getRowPr(row)) || 'N/A';
       if (!acc[pr]) acc[pr] = [];
       acc[pr].push(row);
       return acc;
     }, {});
 
     // Group Purchase Orders by PR
-    const purchaseOrdersGrouped = purchaseOrders.reduce((acc, row) => {
-      const pr = row.PR || row.PR_No || row.PR_Number || row['PR No'] || 'N/A';
+    const purchaseOrdersGrouped = materialItems.reduce((acc, row) => {
+      const pr = normalizePrKey(getRowPr(row)) || 'N/A';
       if (!acc[pr]) acc[pr] = [];
       acc[pr].push(row);
       return acc;
     }, {});
 
+    const getUnifiedPrSupplier = (prKey, groupItems) => {
+      const fromItems = (groupItems || []).map(i => getCurrentSupplier(i)).find(s => s && s !== 'Unknown' && s !== 'N/A');
+      if (fromItems) return fromItems;
+      const fromPoLog = (poLogsGrouped[prKey] || []).map(i => i.Supplier || i.supplier || i._supplierFromPurchaseOrders).find(s => s && s !== 'Unknown' && s !== 'N/A');
+      return fromPoLog || '';
+    };
+
     return (
       <div className="space-y-8">
         {/* Header Summary */}
         <div className="flex items-center gap-3 bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.15)] rounded-2xl px-5 py-3 w-fit text-[#F59E0B] font-black text-xs uppercase tracking-widest animate-zoom-in">
-          <span>{poLogs.length} PO Log</span>
-          <span className="opacity-40">&middot;</span>
-          <span>{purchaseOrders.length} Material Items</span>
+          <span>{materialItems.length} Material Items</span>
         </div>
 
-        {/* Section 1: PO Log Entries */}
-        {poLogs.length > 0 && (
-          <div className="space-y-6 animate-slide-down">
-            <h5 className="text-[11px] font-black text-label uppercase tracking-[0.2em] border-b border-[rgba(255,255,255,0.05)] pb-2 flex items-center gap-2">
-              <IconFileCertificate size={14} className="text-[#F59E0B]" /> PO Log Entries ({poLogs.length})
-            </h5>
-            <div className="space-y-6">
-              {Object.entries(poLogsGrouped).map(([prNumber, groupItems]) => (
-                <div key={prNumber} className="border border-[rgba(255,255,255,0.03)] bg-[rgba(255,255,255,0.01)] rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-card/40 pb-2.5">
-                    <span className="text-xs font-black text-[#F59E0B] uppercase tracking-wider">Group: {prNumber}</span>
-                    <span className="text-[9px] px-2 py-0.5 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.4)] rounded font-bold uppercase tracking-tighter">
-                      {groupItems.length} {groupItems.length === 1 ? 'Entry' : 'Entries'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {groupItems.map((item, idx) => (
-                      <POLogCard key={idx} row={item} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* PO Log entries intentionally hidden in PR detail view */}
 
         {/* Section 2: Material Items */}
-        {purchaseOrders.length > 0 && (
+        {materialItems.length > 0 && (
           <div className="space-y-6 animate-slide-down">
             <h5 className="text-[11px] font-black text-label uppercase tracking-[0.2em] border-b border-[rgba(255,255,255,0.05)] pb-2 flex items-center gap-2">
-              <IconBriefcase size={14} className="text-[#F59E0B]" /> PR List ({purchaseOrders.length})
+              <IconBriefcase size={14} className="text-[#F59E0B]" /> PR List ({materialItems.length})
             </h5>
             <div className="space-y-6">
-              {Object.entries(purchaseOrdersGrouped).map(([prNumber, groupItems]) => (
+              {Object.entries(purchaseOrdersGrouped).map(([prNumber, groupItems]) => {
+                const unifiedSupplier = getUnifiedPrSupplier(prNumber, groupItems);
+                return (
                 <div key={prNumber} className="border border-[rgba(255,255,255,0.03)] bg-[rgba(255,255,255,0.01)] rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-card/40 pb-2.5">
-                    <span className="text-xs font-black text-[#F59E0B] uppercase tracking-wider">Group: {prNumber}</span>
+                  <div className="flex items-center justify-between border-b border-card/40 pb-2.5 gap-3 flex-wrap">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-xs font-black text-[#F59E0B] uppercase tracking-wider">Group: {getRowPr(groupItems[0]) || prNumber}</span>
+                      {unifiedSupplier && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#F59E0B]/90 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.18)] px-2.5 py-1 rounded-lg">
+                          <IconBuildingStore size={12} className="shrink-0" />
+                          <span className="truncate max-w-[220px]" title={unifiedSupplier}>{unifiedSupplier}</span>
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[9px] px-2 py-0.5 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.4)] rounded font-bold uppercase tracking-tighter">
                       {groupItems.length} {groupItems.length === 1 ? 'Item' : 'Items'}
                     </span>
@@ -803,7 +1181,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -843,6 +1222,17 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
     const rows = [];
 
+    const isHeaderRow = (rowObj) => {
+      const norm = (v) => String(v ?? '').trim().toLowerCase();
+      const ref = norm(rowObj['Ref']);
+      const reqRef = norm(rowObj['Req Ref']);
+      const poDate = norm(rowObj['PO Date']);
+      const srNo = norm(rowObj['Sr.No']);
+      if (ref === 'ref' && (reqRef === 'req ref' || poDate === 'po date')) return true;
+      if ((srNo === '#' || srNo === 'sr.no' || srNo === 'sr no') && ref === 'ref') return true;
+      return false;
+    };
+
     for (const line of lines) {
       const rawCells = line.split('\t');
 
@@ -859,9 +1249,9 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         rowObj[col] = val;
       });
 
-      // Skip fully empty rows
+      // Skip fully empty rows and header rows
       const hasContent = PO_COLUMNS.some((col) => rowObj[col] !== '');
-      if (hasContent) rows.push(rowObj);
+      if (hasContent && !isHeaderRow(rowObj)) rows.push(rowObj);
     }
 
     setParsedRows(rows);
@@ -917,8 +1307,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
     // Normalize a PR ref string to "PR-XXXXX" uppercase
     const normalizePr = (s) => {
-      const cleaned = s.toUpperCase().replace(/\s+/g, '');
-      return cleaned.startsWith('PR-') ? cleaned : cleaned.replace(/^PR/, 'PR-');
+      const cleaned = String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+      return cleaned.replace(/^PR-*/i, 'PR-');
     };
 
     // Lines to skip
@@ -1305,7 +1695,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       // Create a map of PR Ref to Project Name from Step 1 for lookup
       const prToProjectMap = {};
       parsedRows.forEach(row => {
-        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
         if (pr) prToProjectMap[pr] = row['Project'] || '';
       });
 
@@ -1313,7 +1703,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       const prCounters = {};
       const enrichedDetails = materialDetailRows.map(row => {
         const pr = row._prRef || 'Ungrouped';
-        const prNorm = pr.trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+        const prNorm = pr.trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
         const project = prToProjectMap[prNorm] || '';
 
         if (!prCounters[pr]) prCounters[pr] = 0;
@@ -1337,8 +1727,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
 
       // Inject rate summary totals into step 1 data & strip junk fields
       const enrichedStep1 = parsedRows.map(row => {
-        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
-        const summaryKey = Object.keys(rateSummaryMap).find(k => k.trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === pr);
+        const pr = (row['Req Ref'] || '').trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
+        const summaryKey = Object.keys(rateSummaryMap).find(k => k.trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-') === pr);
         
         // Start with a clean object containing only allowed fields
         const clean = {};
@@ -1359,56 +1749,140 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         return clean;
       });
 
+      const getComparisonChangeInfo = (prNorm, srKey, srNorm) => {
+        const cacheKey = Object.keys(comparisonCache || {}).find(
+          k => k.toString().trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-') === prNorm
+        );
+        const compRows = cacheKey ? (comparisonCache[cacheKey]?.data || []) : [];
+        if (!compRows.length) return null;
+
+        const matchRow = compRows.find(r => {
+          const rk = String(r.key ?? '').trim();
+          const rkn = (parseInt(rk.replace(/\D/g, ''), 10) || rk).toString();
+          return rk === srKey || rkn === srNorm || String(parseInt(rk, 10)) === String(parseInt(srKey, 10));
+        });
+        if (!matchRow || !matchRow.existing || !matchRow.new) return null;
+
+        const calc = (f) => {
+          const valE = parseFloat(String(matchRow.existing?.[f] || '0').replace(/,/g, '')) || 0;
+          const valN = parseFloat(String(matchRow.new?.[f] || '0').replace(/,/g, '')) || 0;
+          const diff = valN - valE;
+          const pctRaw = valE === 0 ? (valN > 0 ? 100 : 0) : ((diff / valE) * 100);
+          return {
+            amount: diff,
+            percent: pctRaw,
+            percentText: `${pctRaw > 0 ? '+' : ''}${pctRaw.toFixed(1)}%`,
+            direction: Math.abs(diff) <= 0.01 ? 'same' : (diff > 0 ? 'high' : 'less'),
+          };
+        };
+
+        const qty = calc('Qty');
+        const rate = calc('Rate');
+        const total = calc('Total');
+        const price = Math.abs(total.amount) > 0.01 ? total : rate; // prefer total price
+        return { qty, rate, total, price };
+      };
+
+      const withChangeFields = (baseRow, prNorm, srKey, srNorm, userRemark) => {
+        const info = getComparisonChangeInfo(prNorm, srKey, srNorm);
+        if (!info) {
+          return { ...baseRow, Remark: userRemark, remark: userRemark, Remarks: userRemark, remarks: userRemark };
+        }
+
+        const fmt = (n) => `${n > 0 ? '+' : ''}${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const parts = [];
+        if (info.qty.direction !== 'same') parts.push(`Qty: ${info.qty.direction} (${fmt(info.qty.amount)}, ${info.qty.percentText})`);
+        if (info.price.direction !== 'same') parts.push(`Price: ${info.price.direction} (${fmt(info.price.amount)}, ${info.price.percentText})`);
+        const autoRemark = parts.join(' | ');
+        const finalRemark = userRemark ? `${userRemark}${autoRemark ? ` | ${autoRemark}` : ''}` : autoRemark;
+
+        return {
+          ...baseRow,
+          Remark: finalRemark,
+          remark: finalRemark,
+          Remarks: finalRemark,
+          remarks: finalRemark,
+          Qty_Change: fmt(info.qty.amount),
+          Qty_Change_Percent: info.qty.percentText,
+          Qty_Change_Direction: info.qty.direction,
+          Price_Change: fmt(info.price.amount),
+          Price_Change_Percent: info.price.percentText,
+          Price_Change_Direction: info.price.direction,
+          Rate_Change: fmt(info.rate.amount),
+          Rate_Change_Percent: info.rate.percentText,
+          Rate_Change_Direction: info.rate.direction,
+          Total_Change: fmt(info.total.amount),
+          Total_Change_Percent: info.total.percentText,
+          Total_Change_Direction: info.total.direction,
+          ...(userRemark ? { User_Remark: userRemark } : {}),
+        };
+      };
+
       const response = await fetch(IMPORT_WEBHOOK, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'import_po_log',
+          reconciliation_remarks: reconRemarksRef.current || {},
           po_step_1: enrichedStep1,
           materials_step_2: materialRows.map(row => {
-            const prRaw = row['PR'] || row.pr || '';
-            const prNorm = prRaw.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+            const prRaw = row['PR'] || row.pr || row._prRef || '';
+            const prNorm = prRaw.toString().trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
             const project = prToProjectMap[prNorm] || '';
             // Use same key derivation as comparison modal: raw Sr.No string
-            const srKey = (row['Sr.No'] || '').toString().trim();
+            const srKey = (row['Sr.No'] || row['Sr_No'] || row['SrNo'] || row['Seq #'] || row['Seq#'] || row['sr_no'] || '').toString().trim();
             // Also compute normalized version for fallback matching
-            const srNorm = (parseInt(srKey.replace(/\D/g, '')) || srKey).toString();
+            const srNorm = (parseInt(srKey.replace(/\D/g, ''), 10) || srKey).toString();
             
-            const remarks = reconRemarksRef.current;
+            const remarks = reconRemarksRef.current || {};
             const matchedPrKey = Object.keys(remarks).find(
-              k => k.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === prNorm
+              k => k.toString().trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-') === prNorm
             );
             
-            let remark = '';
+            let userRemark = '';
             if (matchedPrKey && remarks[matchedPrKey]) {
-                const subMap = remarks[matchedPrKey];
-                // Try exact match first, then normalized fallback
-                remark = subMap[srKey] || subMap[srNorm] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNorm)?.[1] || '';
+              const subMap = remarks[matchedPrKey];
+              // Try exact match first, then normalized fallback
+              userRemark = subMap[srKey]
+                || subMap[srNorm]
+                || subMap[String(parseInt(srKey, 10))]
+                || Object.entries(subMap).find(([k]) => {
+                  const kn = (parseInt(String(k).replace(/\D/g, ''), 10) || String(k).trim()).toString();
+                  return kn === srNorm || String(k).trim() === srKey;
+                })?.[1]
+                || '';
             }
             
-            return { ...row, Remark: remark, Project: project };
+            return withChangeFields({ ...row, Project: project }, prNorm, srKey, srNorm, userRemark);
           }),
           material_details_step_3: enrichedDetails.map(row => {
-             const prRaw = row._prRef || '';
-             const prNorm = prRaw.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+             const prRaw = row._prRef || row['PR'] || row.pr || '';
+             const prNorm = prRaw.toString().trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
              const project = prToProjectMap[prNorm] || '';
              // Use same key derivation as comparison modal: raw Seq #/Sr.No string
-             const srKey = (row['Seq #'] || row['Sr.No'] || '').toString().trim();
-             const srNorm = (parseInt(srKey.replace(/\D/g, '')) || srKey).toString();
+             const srKey = (row['Seq #'] || row['Seq#'] || row['Sr.No'] || row['Sr_No'] || row['SrNo'] || row['sr_no'] || '').toString().trim();
+             const srNorm = (parseInt(srKey.replace(/\D/g, ''), 10) || srKey).toString();
              
-             const remarks = reconRemarksRef.current;
+             const remarks = reconRemarksRef.current || {};
              const matchedPrKey = Object.keys(remarks).find(
-               k => k.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '') === prNorm
+               k => k.toString().trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-') === prNorm
              );
              
-             let remark = '';
+             let userRemark = '';
              if (matchedPrKey && remarks[matchedPrKey]) {
-                 const subMap = remarks[matchedPrKey];
-                 // Try exact match first, then normalized fallback
-                 remark = subMap[srKey] || subMap[srNorm] || Object.entries(subMap).find(([k]) => (parseInt(k.replace(/\D/g, '')) || k).toString() === srNorm)?.[1] || '';
+               const subMap = remarks[matchedPrKey];
+               // Try exact match first, then normalized fallback
+               userRemark = subMap[srKey]
+                 || subMap[srNorm]
+                 || subMap[String(parseInt(srKey, 10))]
+                 || Object.entries(subMap).find(([k]) => {
+                   const kn = (parseInt(String(k).replace(/\D/g, ''), 10) || String(k).trim()).toString();
+                   return kn === srNorm || String(k).trim() === srKey;
+                 })?.[1]
+                 || '';
              }
              
-             return { ...row, Remark: remark, Project: project };
+             return withChangeFields({ ...row, Project: project }, prNorm, srKey, srNorm, userRemark);
           }),
         }),
       });
@@ -1429,27 +1903,8 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   // Webhook-driven fetches are handled by TanStack Query
 
   const getLatestTotal = useCallback((item) => {
-    // Check in reverse order of versions for the latest price
-    for (let i = 5; i >= 1; i--) {
-      const keys = [`change${i}_total`, `change${i}_price`, `change${i}_Total`, `change${i}_Price` ];
-      for (const k of keys) {
-        const val = item[k];
-        if (val !== null && val !== undefined && val !== '') {
-          const num = parseFloat(String(val).replace(/,/g, ''));
-          if (!isNaN(num) && num !== 0) return num;
-        }
-      }
-    }
-
-    const fallbackKeys = ['Total Price', 'Net Price', 'Total', 'total', 'Price', 'price', 'Amount', 'amount'];
-    for (const k of fallbackKeys) {
-      const val = item[k];
-      if (val !== null && val !== undefined && val !== '') {
-        const num = parseFloat(String(val).replace(/,/g, ''));
-        if (!isNaN(num) && num !== 0) return num;
-      }
-    }
-    return 0;
+    // current_* is the latest price; change1/change2/... are older values.
+    return getHistoryLatestTotal(item);
   }, []);
 
   const uniqueMonths = useMemo(() => {
@@ -1529,9 +1984,22 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
       const formatVal = (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       merged._Ref = merged.Ref; // preserve original PO Ref before overwrite
       merged.Ref = merged['Req Ref'] || merged.Req_Ref || 'Ungrouped'; // Card Title is the PR
-      merged['Net Price'] = formatVal(merged._netSum);
-      merged.VAT = formatVal(merged._vatSum);
-      merged['Total Price'] = formatVal(merged._totalSum);
+
+      const poTotals = purchaseOrderTotalsByPr.get(normalizePrKey(merged.Ref));
+      if (poTotals) {
+        merged['Net Price'] = formatVal(poTotals.net);
+        merged.VAT = formatVal(poTotals.vat);
+        merged['Total Price'] = formatVal(poTotals.total);
+        if (poTotals.original > 0) merged._originalTotal = poTotals.original;
+        if (poTotals.supplier) merged._supplierFromPurchaseOrders = poTotals.supplier;
+        if (poTotals.project) merged.Project = poTotals.project;
+        merged._pricesFromPurchaseOrders = true;
+      } else {
+        merged['Net Price'] = formatVal(merged._netSum);
+        merged.VAT = formatVal(merged._vatSum);
+        merged['Total Price'] = formatVal(merged._totalSum);
+      }
+
       merged._isMergedPR = true;
       return merged;
     });
@@ -1564,31 +2032,37 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     }
 
     return result;
-  }, [logData, logSearch, monthFilter, enteredByFilter, statusFilter, searchQuery]);
+  }, [logData, logSearch, monthFilter, enteredByFilter, statusFilter, searchQuery, purchaseOrderTotalsByPr]);
+
+  const dashboardData = useMemo(
+    () => (dedupedPurchaseOrders.length ? dedupedPurchaseOrders : poMasterData),
+    [dedupedPurchaseOrders, poMasterData],
+  );
+  const dashboardLoading = dedupedPurchaseOrders.length ? false : (purchaseOrdersLoading || poMasterLoading);
 
   const dashboardStats = useMemo(() => {
-    if (!poMasterData.length) return null;
+    if (!dashboardData.length) return null;
 
     let totalSpend = 0;
     const uniquePRs = new Set();
     const uniqueSuppliers = new Set();
 
-    poMasterData.forEach(item => {
+    dashboardData.forEach(item => {
       const total = getLatestTotal(item);
       totalSpend += total;
-      const pr = item.pr || item.PR;
-      if (pr) uniquePRs.add(pr);
-      const supplier = item.change1_supplier || item.Supplier;
-      if (supplier) uniqueSuppliers.add(supplier);
+      const pr = getRowPr(item);
+      if (pr) uniquePRs.add(normalizePrKey(pr));
+      const supplier = getCurrentSupplier(item);
+      if (supplier && supplier !== 'Unknown') uniqueSuppliers.add(supplier);
     });
 
     return {
       totalSpend,
       uniquePRs: uniquePRs.size,
       uniqueSuppliers: uniqueSuppliers.size,
-      totalItems: poMasterData.length,
+      totalItems: dashboardData.length,
     };
-  }, [poMasterData, getLatestTotal]);
+  }, [dashboardData, getLatestTotal]);
 
   const parsePODate = useCallback((value) => {
     if (!value) return null;
@@ -1608,15 +2082,28 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
   }, []);
 
   const spendBreakdownData = useMemo(() => {
-    if (!logData.length) return [];
-    const periodMap = {};
+    const usePurchaseOrders = dedupedPurchaseOrders.length > 0;
+    const source = usePurchaseOrders ? dedupedPurchaseOrders : logData;
+    if (!source.length) return [];
 
+    const periodMap = {};
     const isDailyView = drillMonth !== null;
 
-    logData.forEach(row => {
-      const net = parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
+    source.forEach(row => {
+      let net;
+      let poDate;
+
+      if (usePurchaseOrders) {
+        const amounts = getCurrentAmounts(row);
+        if (!amounts) return;
+        net = amounts.price ?? amounts.total ?? 0;
+        poDate = amounts.version?.date || row.current_date || row.change1_date || '';
+      } else {
+        net = parseFloat(String(row['Net Price'] || '0').replace(/,/g, '')) || 0;
+        poDate = row.po_date || row['PO Date'] || '';
+      }
+
       if (!net) return;
-      const poDate = row.po_date || row['PO Date'] || '';
       const d = parsePODate(poDate);
       if (!d) return;
 
@@ -1637,35 +2124,35 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
     return Object.entries(periodMap)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([period, value]) => ({ period, value }));
-  }, [logData, spendPeriod, drillMonth, parsePODate]);
+  }, [dedupedPurchaseOrders, logData, spendPeriod, drillMonth, parsePODate]);
 
   const projectData = useMemo(() => {
-    if (!poMasterData.length) return [];
+    if (!dashboardData.length) return [];
     const projMap = {};
-    poMasterData.forEach(item => {
-      let projectRaw = (item.project || item.Project || 'Unknown').trim();
+    dashboardData.forEach(item => {
+      const projectRaw = String(getRowProject(item) || 'Unknown').trim();
       const project = projectRaw.startsWith('AMANA ') ? 'S' + projectRaw : projectRaw;
       
       const total = getLatestTotal(item);
       if (!projMap[project]) projMap[project] = { project, totalInvested: 0, prCount: new Set(), itemCount: 0 };
       projMap[project].totalInvested += total;
-      const pr = item.pr || item.PR;
-      if (pr) projMap[project].prCount.add(pr);
+      const pr = getRowPr(item);
+      if (pr) projMap[project].prCount.add(normalizePrKey(pr));
       projMap[project].itemCount++;
     });
     return Object.values(projMap)
       .map(p => ({ ...p, prCount: p.prCount.size }))
       .filter(p => p.totalInvested > 0) // Remove items with value 0
       .sort((a, b) => b.totalInvested - a.totalInvested);
-  }, [poMasterData, getLatestTotal]);
+  }, [dashboardData, getLatestTotal]);
 
   const topMaterials = useMemo(() => {
-    if (!poMasterData.length) return [];
+    if (!dashboardData.length) return [];
     const freqMap = {};
-    poMasterData.forEach(item => {
+    dashboardData.forEach(item => {
       const rawDesc = String(
-        item.Description || item.description || item.desc ||
-        item.item_description || item.change1_description ||
+        getCurrentDescription(item) || item.desc ||
+        item.item_description ||
         item.Material || item.material || ''
       ).trim();
       const desc = rawDesc ? rawDesc.split(' - ')[0].trim() : '';
@@ -1674,18 +2161,24 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         freqMap[key] = { description: desc || 'Unknown', count: 0, totalQty: 0, totalSpend: 0, suppliers: new Set() };
       }
       freqMap[key].count++;
-      const qty = parseFloat(String(item.Qty || item.Req_Qty || '0').replace(/,/g, '')) || 0;
+
+      const latestVersion = getCurrentVersion(item);
+      const qty = toNumber(latestVersion?.qty)
+        ?? toNumber(item.current_qty)
+        ?? toNumber(item.Req_Qty)
+        ?? toNumber(item.Qty)
+        ?? 0;
       freqMap[key].totalQty += qty;
       freqMap[key].totalSpend += getLatestTotal(item);
-      const sup = item.change1_supplier || item.Supplier;
-      if (sup) freqMap[key].suppliers.add(sup);
+      const sup = getCurrentSupplier(item);
+      if (sup && sup !== 'Unknown') freqMap[key].suppliers.add(sup);
     });
     return Object.values(freqMap)
       .map(m => ({ ...m, suppliers: m.suppliers.size }))
       .filter(m => m.totalSpend > 0) // Remove items with value 0
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-  }, [poMasterData, getLatestTotal]);
+  }, [dashboardData, getLatestTotal]);
 
   const formatLargeCurrency = (value) => {
     if (value >= 1000000) return `AED ${(value / 1000000).toFixed(1)}M`;
@@ -1748,14 +2241,23 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
           const n8nData = Array.isArray(data) ? data : (data.data || data.items || []);
           const existingData = n8nData.map(item => {
             const projRaw = (item.Project || 'Unknown').trim();
-            return {
+            const existing = {
               ...item,
               PR: item['Req Ref'] || item.Ref || 'N/A',
               Description: item.Description || item.Ref || 'No Description',
               Project: projRaw.startsWith('AMANA ') ? 'S' + projRaw : projRaw,
-              Supplier: item.Supplier || 'Unknown',
-              change1_total: parseFloat(String(item['Original Pirce'] || item['Net Price'] || item['Total Price'] || 0).replace(/,/g, ''))
+              Supplier: item.Supplier || '',
             };
+
+            // Legacy rows without a price history: expose the PO total as the
+            // current (latest) price instead of treating it as change1.
+            if (!getCurrentVersion(existing)) {
+              existing.current_total = parseFloat(
+                String(item['Original Pirce'] || item['Net Price'] || item['Total Price'] || 0).replace(/,/g, '')
+              );
+            }
+
+            return existing;
           });
           allExistingData = [...allExistingData, ...existingData];
         }
@@ -1765,26 +2267,18 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
         const lookup = {};
         allExistingData.forEach(item => {
           const normalized = { ...item };
-          let latestVersion = 0;
-          for (let n = 5; n >= 1; n--) {
-            const hasRate = item[`change${n}_rate`] !== null && item[`change${n}_rate`] !== undefined && item[`change${n}_rate`] !== '';
-            const hasQty = item[`change${n}_qty`] !== null && item[`change${n}_qty`] !== undefined && item[`change${n}_qty`] !== '';
-            const hasSupplier = item[`change${n}_supplier`] !== null && item[`change${n}_supplier`] !== undefined && item[`change${n}_supplier`] !== '';
-            const hasDate = item[`change${n}_date`] !== null && item[`change${n}_date`] !== undefined && item[`change${n}_date`] !== '';
-            if (hasRate || hasQty || hasSupplier || hasDate) {
-              latestVersion = n;
-              break;
-            }
-          }
-          
-          if (latestVersion > 0) {
-            normalized.Qty = item[`change${latestVersion}_qty`] || item.Qty || item.Req_Qty || '0.00';
-            normalized.Rate = item[`change${latestVersion}_rate`] || item.Rate || '0.00';
-            normalized.Total = item[`change${latestVersion}_price`] || item[`change${latestVersion}_total`] || item.Total || '0.00';
-            normalized.Supplier = item[`change${latestVersion}_supplier`] || item.Supplier || '';
-            normalized.Description = item[`change${latestVersion}_description`] || item.Description || '';
+          const latestVersion = getCurrentVersion(item);
+
+          if (latestVersion) {
+            // current_* is the latest; change1 is the price before it.
+            normalized.Qty = latestVersion.qty || item.Qty || item.Req_Qty || '0.00';
+            normalized.Rate = latestVersion.rate || item.Rate || '0.00';
+            normalized.Total = latestVersion.price || latestVersion.total || item.Total || '0.00';
+            normalized.Supplier = latestVersion.supplier || item.Supplier || '';
+            normalized.Description = latestVersion.description || item.Description || '';
             normalized.Sr_No = (item.Sr_No || item.SrNo || item['Sr.No'] || '').toString();
-            normalized._versionUsed = latestVersion;
+            normalized._versionUsed = latestVersion.isCurrent ? 0 : latestVersion.sourceIndex;
+            normalized._isCurrent = latestVersion.isCurrent;
           } else {
             normalized.Qty = item.Qty || item.Req_Qty || '0.00';
             normalized.Rate = item.Rate || '0.00';
@@ -1793,6 +2287,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
             normalized.Description = item.Description || '';
             normalized.Sr_No = (item.Sr_No || item.SrNo || item['Sr.No'] || '').toString();
             normalized._versionUsed = 0;
+            normalized._isCurrent = false;
           }
 
           // Match purely by Sr_No as requested
@@ -2911,10 +3406,10 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                 <p className="text-[10px] font-black text-label uppercase tracking-wider">Project Wise Money Invested</p>
               </div>
               <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
-                {poMasterData.length} line items
+                {dashboardData.length} line items
               </span>
             </div>
-            {poMasterLoading ? (
+            {dashboardLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-6 h-6 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin" />
               </div>
@@ -2975,10 +3470,10 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                 <p className="text-[10px] font-black text-label uppercase tracking-wider">Materials Maximum Time Purchased</p>
               </div>
               <span className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-widest">
-                Top {Math.min(topMaterials.length, 10)} of {poMasterData.length} items
+                Top {Math.min(topMaterials.length, 10)} of {dashboardData.length} items
               </span>
             </div>
-            {poMasterLoading ? (
+            {dashboardLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-6 h-6 border-2 border-[#F59E0B] border-t-transparent rounded-full animate-spin" />
               </div>
@@ -3545,11 +4040,11 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                   </div>
                   <div className="bg-[#090e17] p-4 rounded-xl border border-[rgba(255,255,255,0.02)]">
                     <p className="font-bold text-label uppercase text-[9px]">VAT</p>
-                    <p className="text-white font-black text-sm mt-1">AED {selectedCard.VAT || '0.00'}</p>
+                    <p className="text-white font-black text-sm mt-1">AED {vatPriceStr}</p>
                   </div>
                   <div className="bg-[rgba(245,158,11,0.03)] p-4 rounded-xl border border-[rgba(245,158,11,0.15)] shadow-inner">
                     <p className="font-extrabold text-[#F59E0B] uppercase text-[9px] tracking-widest">Total Price</p>
-                    <p className="text-[#F59E0B] font-black text-base mt-1">AED {selectedCard['Total Price'] || '0.00'}</p>
+                    <p className="text-[#F59E0B] font-black text-base mt-1">AED {totalPriceStr}</p>
                   </div>
                   <div className="bg-[#090e17] p-4 rounded-xl border border-[rgba(255,255,255,0.02)]">
                     <p className="font-bold text-label uppercase text-[9px]">Discount</p>
@@ -3557,7 +4052,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                   </div>
                 </div>
 
-                {origVal > 0 && (
+                {origVal > 0 && getPriceHistory(selectedCard || {}).length > 1 && (
                   <div className="mt-6 p-5 rounded-2xl border bg-black/40 flex flex-col md:flex-row items-center justify-between gap-5 border-[rgba(255,255,255,0.05)] shadow-md">
                     <div className="flex items-start md:items-center gap-6 w-full md:w-auto justify-center md:justify-start">
                       <div className="text-center md:text-left">
@@ -3674,6 +4169,31 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                           const val = selectedCard['Doc. Remarks'] || selectedCard.Doc_Remarks || selectedCard.Remarks || selectedCard.remarks;
                           if (!val || val === 'N/A' || val.toLowerCase() === 'no remarks') return 'No remarks recorded.';
                           return String(val).replace(/&amp;/g, '&');
+                        })()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-bold text-label uppercase text-[9px]">PR / Reconciliation Remarks</p>
+                      <p className="text-white font-medium text-xs mt-1 bg-[#090e17] p-2.5 rounded-lg border border-[rgba(245,158,11,0.15)]">
+                        {(() => {
+                          const modalPrDetails = selectedCard ? prDetails[selectedCard.Ref] : null;
+                          const extractRemarks = (data) => {
+                            if (!data) return [];
+                            if (Array.isArray(data)) {
+                              return data.flatMap(item => {
+                                if (item?.remark || item?.Remark) return [String(item.remark || item.Remark).trim()].filter(Boolean);
+                                if (item?.remarks || item?.Remarks) return [String(item.remarks || item.Remarks).trim()].filter(Boolean);
+                                if (item?.data && Array.isArray(item.data)) return extractRemarks(item.data);
+                                return [];
+                              });
+                            }
+                            if (data.data && Array.isArray(data.data)) return extractRemarks(data.data);
+                            const v = data.remark || data.Remark || data.remarks || data.Remarks;
+                            return v ? [String(v).trim()].filter(Boolean) : [];
+                          };
+                          const all = extractRemarks(modalPrDetails);
+                          const prRemarks = [...new Set(all.filter(Boolean))].join(' | ');
+                          return prRemarks || 'No PR remarks found.';
                         })()}
                       </p>
                     </div>
@@ -3834,6 +4354,9 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                                     {row.existing?._versionUsed > 0 && (
                                       <span className="text-[9px] px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md font-black uppercase tracking-tighter">v{row.existing._versionUsed} Active</span>
                                     )}
+                                    {row.existing?._isCurrent && (
+                                      <span className="text-[9px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md font-black uppercase tracking-tighter">Current Active</span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -3844,82 +4367,131 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                               )}
                            </div>
 
-                           {/* Two Column Layout */}
-                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative">
-                              <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-px bg-white/5 -translate-x-1/2" />
-                              
-                              {/* LEFT: Current DB Version */}
-                              <div className="space-y-4">
-                                <div className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                           {/* Values / Comparison */}
+                           {row.status === 'NEW' ? (
+                             <div className="space-y-4">
+                               <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> New Entry — pasted values only
+                               </div>
+                               <div className="grid grid-cols-3 gap-6 max-w-xl">
+                                 {['Qty', 'Rate', 'Total'].map(f => (
+                                   <div key={f}>
+                                     <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
+                                     <p className="text-sm font-black font-mono text-white/90">{row.new ? (row.new[f] || '0.00') : '—'}</p>
+                                   </div>
+                                 ))}
+                               </div>
+                             </div>
+                           ) : (
+                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative">
+                               <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-px bg-white/5 -translate-x-1/2" />
+                               
+                               {/* LEFT: Current DB Version */}
+                               <div className="space-y-4">
+                                 <div className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" /> Current Version
-                                </div>
-                                <div className="grid grid-cols-3 gap-6">
-                                  {['Qty', 'Rate', 'Total'].map(f => (
-                                    <div key={f}>
-                                      <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
-                                      <p className="text-sm font-black text-white/60 font-mono transition-colors group-hover/row:text-white/80">{row.existing ? (row.existing[f] || '0.00') : '—'}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+                                 </div>
+                                 <div className="grid grid-cols-3 gap-6">
+                                   {['Qty', 'Rate', 'Total'].map(f => (
+                                     <div key={f}>
+                                       <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
+                                       <p className="text-sm font-black text-white/60 font-mono transition-colors group-hover/row:text-white/80">{row.existing ? (row.existing[f] || '0.00') : '—'}</p>
+                                     </div>
+                                   ))}
+                                 </div>
+                               </div>
 
-                              {/* RIGHT: New Pasted */}
-                              <div className="pl-8 space-y-4">
-                                <div className="text-[9px] font-black text-[#F59E0B]/40 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                               {/* RIGHT: New Pasted */}
+                               <div className="pl-8 space-y-4">
+                                 <div className="text-[9px] font-black text-[#F59E0B]/40 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                                    <div className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]/50" /> New Pasted
-                                </div>
-                                <div className="grid grid-cols-3 gap-6">
-                                  {['Qty', 'Rate', 'Total'].map(f => {
-                                    const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
-                                    const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
-                                    const diff = valN - valE;
-                                    const changed = Math.abs(diff) > 0.01;
-                                    
-                                    let textColor = 'text-white/80';
-                                    if (changed) {
-                                      if (f === 'Rate' || f === 'Total') textColor = diff > 0 ? 'text-rose-400' : 'text-emerald-400';
-                                      else textColor = 'text-blue-400';
-                                    }
+                                 </div>
+                                 <div className="grid grid-cols-3 gap-6">
+                                   {['Qty', 'Rate', 'Total'].map(f => {
+                                     const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
+                                     const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
+                                     const diff = valN - valE;
+                                     const changed = Math.abs(diff) > 0.01;
+                                     
+                                     let textColor = 'text-white/80';
+                                     if (changed) {
+                                       if (f === 'Rate' || f === 'Total') textColor = diff > 0 ? 'text-rose-400' : 'text-emerald-400';
+                                       else textColor = 'text-blue-400';
+                                     }
 
-                                    return (
-                                      <div key={f}>
-                                        <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
-                                        <p className={`text-sm font-black font-mono ${textColor}`}>{row.new ? (row.new[f] || '0.00') : '—'}</p>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                           </div>
+                                     return (
+                                       <div key={f}>
+                                         <p className="text-[8px] font-black text-white/10 uppercase tracking-widest mb-1">{f}</p>
+                                         <p className={`text-sm font-black font-mono ${textColor}`}>{row.new ? (row.new[f] || '0.00') : '—'}</p>
+                                       </div>
+                                     );
+                                   })}
+                                 </div>
+                               </div>
+                             </div>
+                           )}
 
                            {/* DIFF Section (only if modified or removal) */}
-                           {isModified && (
-                              <div className="mt-8 pt-6 border-t border-white/5 flex items-center flex-wrap gap-x-8 gap-y-4 bg-white/[0.01] -mx-8 px-8 pb-6 rounded-b-none">
-                                {['Qty', 'Rate', 'Total'].map(f => {
-                                  if (!diffFields.includes(f) && f !== 'Total') return null;
-                                  const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
-                                  const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
-                                  const diff = valN - valE;
-                                  const pct = calculatePercentChange(valE, valN);
-                                  const isIncrease = diff > 0;
-                                  const isDecreasing = diff < 0;
+                           {isModified && (() => {
+                             const getDiffInfo = (f) => {
+                               const valE = row.existing ? parseFloat(String(row.existing[f] || '0').replace(/,/g, '')) : 0;
+                               const valN = row.new ? parseFloat(String(row.new[f] || '0').replace(/,/g, '')) : 0;
+                               const diff = valN - valE;
+                               return {
+                                 diff,
+                                 pct: calculatePercentChange(valE, valN),
+                                 isIncrease: diff > 0.01,
+                                 isDecreasing: diff < -0.01,
+                               };
+                             };
+                             const qtyChanged = diffFields.includes('Qty');
+                             const priceField = diffFields.includes('Total') ? 'Total' : diffFields.includes('Rate') ? 'Rate' : null;
+                             const qtyInfo = getDiffInfo('Qty');
+                             const priceInfo = priceField ? getDiffInfo(priceField) : null;
 
-                                  return (
-                                    <div key={f} className="flex items-center gap-3">
-                                      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">{f} Δ</div>
-                                      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black font-mono ${
-                                        f === 'Qty' ? 'bg-blue-500/10 text-blue-400' :
-                                        isIncrease ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
-                                      }`}>
-                                        {diff > 0 ? '+' : ''}{diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                        <span className="opacity-60 text-[9px]">({pct})</span>
-                                        {isIncrease ? <IconArrowUpRight size={12} className="rotate-0" /> : isDecreasing ? <IconArrowUpRight size={12} className="rotate-90" /> : null}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                           )}
+                             if (qtyChanged && priceInfo) {
+                               const qtyLabel = qtyInfo.isIncrease ? 'High' : 'Less';
+                               const priceLabel = priceInfo.isIncrease ? 'High' : 'Less';
+                               const fmtAmt = (n) => `${n > 0 ? '+' : ''}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                               return (
+                                 <div className="mt-8 pt-6 border-t border-white/5 flex items-center flex-wrap gap-x-4 gap-y-3 bg-white/[0.01] -mx-8 px-8 pb-6 rounded-b-none">
+                                   <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">Changes</div>
+                                   <div className="px-3 py-1.5 rounded-full text-[11px] font-black bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                                     Qty: {qtyLabel} ({fmtAmt(qtyInfo.diff)}, {qtyInfo.pct})
+                                   </div>
+                                   <div className={`px-3 py-1.5 rounded-full text-[11px] font-black border ${
+                                     priceInfo.isIncrease ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                   }`}>
+                                     Price: {priceLabel} ({fmtAmt(priceInfo.diff)}, {priceInfo.pct})
+                                   </div>
+                                 </div>
+                               );
+                             }
+
+                             return (
+                               <div className="mt-8 pt-6 border-t border-white/5 flex items-center flex-wrap gap-x-8 gap-y-4 bg-white/[0.01] -mx-8 px-8 pb-6 rounded-b-none">
+                                 {['Qty', 'Rate', 'Total'].map(f => {
+                                   if (!diffFields.includes(f) && f !== 'Total') return null;
+                                   const { diff, pct, isIncrease, isDecreasing } = getDiffInfo(f);
+                                   const changeLabel = isIncrease ? 'Higher' : isDecreasing ? 'Less' : 'No change';
+                                   return (
+                                     <div key={f} className="flex items-center gap-3">
+                                       <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">{f} Δ</div>
+                                       <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black font-mono ${
+                                         f === 'Qty' ? 'bg-blue-500/10 text-blue-400' :
+                                         isIncrease ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
+                                       }`}>
+                                         <span className="uppercase text-[9px] tracking-wider mr-0.5">{changeLabel}</span>
+                                         {diff > 0 ? '+' : ''}{diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                         <span className="opacity-60 text-[9px]">({pct})</span>
+                                         {isIncrease ? <IconArrowUpRight size={12} className="rotate-0" /> : isDecreasing ? <IconArrowUpRight size={12} className="rotate-90" /> : null}
+                                       </div>
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+                             );
+                           })()}
 
                            {/* ── REMARK SECTION (shown only where there is a change) ── */}
                            {needsRemark && (
@@ -3996,7 +4568,7 @@ const POLog = ({ mode = 'dashboard', isViewer = false, searchQuery = '' }) => {
                       }, {});
                       if (Object.keys(filledRemarks).length > 0) {
                         const prRef = comparisonModal.prRef || '';
-                        const normalizedPr = prRef.toString().trim().toUpperCase().replace(/^PR/, 'PR-').replace(/\s+/g, '');
+                        const normalizedPr = prRef.toString().trim().toUpperCase().replace(/\s+/g, '').replace(/^PR-*/i, 'PR-');
                         setReconRemarks(prev => ({
                           ...prev,
                           [normalizedPr]: { ...(prev[normalizedPr] || {}), ...filledRemarks }

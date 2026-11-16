@@ -1,28 +1,46 @@
 
+import { getPriceHistory } from './priceHistory';
+
 /**
  * Utility to parse PR items with multiple potential changes.
+ *
+ * Price model: current_* is the latest price, change1 is the price before it,
+ * change2 is before change1, and so on (higher change number = older).
  */
 export const processPRItems = (items) => {
   if (!items || !Array.isArray(items)) return [];
   
   return items.map(item => {
-    const history = [];
-    
-    // Determine the starting point. 
-    // If ANY change1 field exists, it is the actual "Version 1" / Baseline.
-    // Otherwise, we use the root properties as "Original".
-    const hasChange1 = Object.keys(item).some(key => key.startsWith('change1_') && item[key] != null && item[key] !== '');
+    const versions = getPriceHistory(item);
 
-    if (!hasChange1) {
+    const history = versions.map(version => ({
+      version: version.label,
+      description: version.description || item.Description,
+      qty: version.qty || item.Req_Qty,
+      uom: item.UOM,
+      project: item.Project,
+      remainQty: item.Remain_Qty,
+      nextDoc: item.Next_Doc,
+      rate: version.rate ?? null,
+      price: version.price ?? null,
+      vat: version.vat ?? null,
+      total: version.total ?? null,
+      supplier: version.supplier ?? null,
+      srNo: item.Sr_No,
+      prNo: item.PR || item.PR_No
+    }));
+
+    // Backwards compatibility for rows with only generic fields.
+    if (history.length === 0) {
       history.push({
-        version: 'Original',
+        version: 'Current',
         description: item.Description,
         qty: item.Req_Qty,
         uom: item.UOM,
         project: item.Project,
         remainQty: item.Remain_Qty,
         nextDoc: item.Next_Doc,
-        rate: item.Rate || null, 
+        rate: item.Rate || null,
         price: item.Price || null,
         vat: item.VAT || null,
         total: item.Total || null,
@@ -30,26 +48,6 @@ export const processPRItems = (items) => {
         srNo: item.Sr_No,
         prNo: item.PR || item.PR_No
       });
-    }
-
-    // Collect all Change 1-20
-    for (let i = 1; i <= 20; i++) {
-      const hasAnyChange = Object.keys(item).some(key => key.startsWith(`change${i}_`) && item[key] != null && item[key] !== '');
-      if (hasAnyChange) {
-        history.push({
-          version: `Version ${i}`,
-          description: item[`change${i}_description`] || item.Description,
-          qty: item[`change${i}_qty`],
-          rate: item[`change${i}_rate`],
-          price: item[`change${i}_price`],
-          vat: item[`change${i}_vat`],
-          total: item[`change${i}_total`],
-          supplier: item[`change${i}_supplier`],
-          uom: item.UOM,
-          project: item.Project,
-          nextDoc: item.Next_Doc
-        });
-      }
     }
 
     const latest = history[history.length - 1] || {};

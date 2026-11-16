@@ -12,6 +12,106 @@ import {
 } from '@tabler/icons-react';
 import { adminSupabase as supabase } from '../../lib/supabase';
 import { SearchBar } from '../ui/search-bar';
+import {
+  getLatestTotal as getHistoryLatestTotal,
+  getOriginalTotal as getHistoryOriginalTotal,
+  summarizePriceHistory,
+  toNumber,
+} from '../../utils/priceHistory';
+
+/* ─── purchase_orders matching helpers ─── */
+const normalizePr = (value) => {
+  if (value === null || value === undefined) return '';
+  let key = String(value).trim().toUpperCase().replace(/[\s\u00A0]+/g, '');
+  if (!key) return '';
+  key = key.replace(/^PR[-\s]?/, 'PR-');
+  if (!key.startsWith('PR-')) key = `PR-${key}`;
+  return key.replace(/(^|-)0+(\d+)/g, '$1$2');
+};
+
+const normalizeSr = (value) => {
+  if (value === null || value === undefined || String(value).trim() === '') return '';
+  const text = String(value).trim();
+  const numeric = Number(text.replace(/,/g, ''));
+  return Number.isFinite(numeric) ? String(numeric) : text.toUpperCase();
+};
+
+const normalizeDescription = (value) =>
+  String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:]+$/g, '');
+
+const buildPurchaseOrderIndex = (rows = []) => {
+  const byKey = new Map();
+  const byPr = new Map();
+
+  rows.forEach(row => {
+    const pr = normalizePr(row.PR || row.pr);
+    if (!pr) return;
+
+    const sr = normalizeSr(row.Sr_No ?? row['Sr.No'] ?? row.sr_no);
+    const desc = normalizeDescription(row.current_description || row.Description || row.description);
+
+    if (sr) byKey.set(`${pr}::${sr}`, row);
+    if (desc) {
+      const descKey = `${pr}::${desc}`;
+      if (!byKey.has(descKey)) byKey.set(descKey, row);
+    }
+
+    if (!byPr.has(pr)) byPr.set(pr, []);
+    byPr.get(pr).push(row);
+  });
+
+  return { byKey, byPr };
+};
+
+const findPurchaseOrder = (item, index) => {
+  const pr = normalizePr(item.PR || item.pr);
+  if (!pr) return null;
+
+  const sr = normalizeSr(item['Sr.No'] ?? item.Sr_No ?? item.sr_no);
+  if (sr) {
+    const match = index.byKey.get(`${pr}::${sr}`);
+    if (match) return match;
+  }
+
+  const desc = normalizeDescription(item.Description || item.description || item.current_description);
+  if (!desc) return null;
+
+  const exact = index.byKey.get(`${pr}::${desc}`);
+  if (exact) return exact;
+
+  const candidates = index.byPr.get(pr) || [];
+  return candidates.find((candidate) => {
+    const candidateDesc = normalizeDescription(candidate.current_description || candidate.Description);
+    return candidateDesc && (candidateDesc.startsWith(desc) || desc.startsWith(candidateDesc));
+  }) || null;
+};
+
+const fetchAllPurchaseOrders = async () => {
+  const all = [];
+  const size = 1000;
+  let start = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .select('*')
+      .order('PR', { ascending: true })
+      .order('Sr_No', { ascending: true })
+      .range(start, start + size - 1);
+
+    if (error) {
+      console.warn('Unable to load purchase_orders for dashboard:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+
+    all.push(...data);
+    if (data.length < size) break;
+    start += size;
+  }
+
+  return all;
+};
 
 /* ─── Styles & Theme Constants ─── */
 const COLORS = {
@@ -75,25 +175,56 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const [filters, setFilters] = useState({ project: '', supplier: '', search: '' });
 
   /* ─── Data Fetching ─── */
-  const { data: rawData = [], isLoading: loading, error } = useQuery({
+  const { data: rawData = [], isLoading: loading } = useQuery({
     queryKey: ['review-dashboard-data'],
     queryFn: async () => {
-      const [res25, res26] = await Promise.all([
+      const [res25, res26, purchaseOrders] = await Promise.all([
         supabase.from('material_detail_25').select('*').limit(1000000),
-        supabase.from('material_detail_26').select('*').limit(1000000)
+        supabase.from('material_detail_26').select('*').limit(1000000),
+        fetchAllPurchaseOrders(),
       ]);
 
-      const mapItem = (item) => ({
-        PR: item.PR || item.pr || 'N/A',
-        Description: item.Description || item.description || 'No Description',
-        Project: item.Project || item.project || 'Unknown',
-        Supplier: item.change1_supplier || 'Unknown',
-        change1_total: item.change1_total ? parseFloat(String(item.change1_total).replace(/,/g, '')) : null,
-        change2_total: item.change2_total ? parseFloat(String(item.change2_total).replace(/,/g, '')) : null,
-        change3_total: item.change3_total ? parseFloat(String(item.change3_total).replace(/,/g, '')) : null,
-        change4_total: item.change4_total ? parseFloat(String(item.change4_total).replace(/,/g, '')) : null,
-        change5_total: item.change5_total ? parseFloat(String(item.change5_total).replace(/,/g, '')) : null,
-      });
+      // Prices always come from purchase_orders (current_*), matched to the
+      // material line by PR + Sr_No, then by description.
+      const purchaseOrderIndex = buildPurchaseOrderIndex(purchaseOrders || []);
+
+      const mapItem = (item) => {
+        const purchaseOrder = findPurchaseOrder(item, purchaseOrderIndex);
+        const pricedItem = purchaseOrder ? { ...item, ...purchaseOrder } : item;
+        const summary = summarizePriceHistory(pricedItem);
+        const current = summary.current;
+
+        return {
+          ...pricedItem,
+          // Keep the material row's identity; only prices/version fields come
+          // from purchase_orders.
+          PR: item.PR || item.pr || pricedItem.PR || pricedItem.pr || 'N/A',
+          Description:
+            current?.description ||
+            item.Description ||
+            item.description ||
+            pricedItem.Description ||
+            pricedItem.description ||
+            'No Description',
+          Project: item.Project || item.project || pricedItem.Project || pricedItem.project || 'Unknown',
+          Supplier:
+            current?.supplier ||
+            item.Supplier ||
+            pricedItem.Supplier ||
+            'Unknown',
+          current_total: toNumber(pricedItem.current_total),
+          change1_total: toNumber(pricedItem.change1_total),
+          change2_total: toNumber(pricedItem.change2_total),
+          change3_total: toNumber(pricedItem.change3_total),
+          change4_total: toNumber(pricedItem.change4_total),
+          change5_total: toNumber(pricedItem.change5_total),
+          // current_* is latest; change1 is previous; higher change numbers are older.
+          changeCount: summary.changeCount,
+          latestTotal: summary.latestTotal,
+          originalTotal: summary.originalTotal,
+          _hasPurchaseOrderPrice: Boolean(purchaseOrder),
+        };
+      };
 
       const data25 = (res25.data || []).map(mapItem);
       const data26 = (res26.data || []).map(mapItem);
@@ -122,21 +253,14 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
     staleTime: 5 * 60 * 1000,
   });
 
-  /* ─── Helper: Get Latest Total ─── */
-  const getLatestTotal = (item) => {
-    // Check internal mapped fields or standard changeN fields
-    for (let i = 20; i >= 2; i--) {
-      const val = item[`change${i}_total`] || item[`change_in_price_${i-1}`];
-      if (val !== null && val !== undefined && val !== '') {
-        return parseFloat(String(val).replace(/,/g, ''));
-      }
-    }
-    return parseFloat(String(item.change1_total || item['Net Price'] || 0).replace(/,/g, ''));
-  };
+  /* ─── Helper: Latest / Original totals ─── */
+  // current_total is the latest price; the highest populated changeN_total is
+  // the original baseline. mapItem pre-computes both to avoid rebuilding history.
+  const getLatestTotal = (item) =>
+    typeof item.latestTotal === 'number' ? item.latestTotal : getHistoryLatestTotal(item);
 
-  const getOriginalTotal = (item) => {
-    return parseFloat(String(item.change1_total || 0).replace(/,/g, ''));
-  };
+  const getOriginalTotal = (item) =>
+    typeof item.originalTotal === 'number' ? item.originalTotal : getHistoryOriginalTotal(item);
 
   /* ─── Filter Logic ─── */
   const filteredData = useMemo(() => {
@@ -166,8 +290,8 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
     if (loading) return null;
 
     const prs = new Set(filteredData.map(i => i.PR || i.PR_No)).size;
-    const itemsWithChanges = filteredData.filter(i => i.change2_total !== null && i.change2_total !== '').length;
-    const itemsWithMultiple = filteredData.filter(i => i.change3_total !== null && i.change3_total !== '').length;
+    const itemsWithChanges = filteredData.filter(i => i.changeCount > 0).length;
+    const itemsWithMultiple = filteredData.filter(i => i.changeCount >= 2).length;
 
     let totalOriginal = 0;
     let totalLatest = 0;
@@ -201,32 +325,30 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
   const multiChangeDetail = useMemo(() => {
     if (loading) return null;
 
-    const oneChange = filteredData.filter(i => i.change2_total && !i.change3_total).length;
-    const twoChanges = filteredData.filter(i => i.change3_total && !i.change4_total).length;
-    const threeChanges = filteredData.filter(i => i.change4_total && !i.change5_total).length;
-    const fourPlusChanges = filteredData.filter(i => i.change5_total).length;
+    const oneChange = filteredData.filter(i => i.changeCount === 1).length;
+    const twoChanges = filteredData.filter(i => i.changeCount === 2).length;
+    const threeChanges = filteredData.filter(i => i.changeCount === 3).length;
+    const fourPlusChanges = filteredData.filter(i => i.changeCount >= 4).length;
     const totalChanged = oneChange + twoChanges + threeChanges + fourPlusChanges;
 
     const avgChanges = totalChanged > 0
-      ? ((oneChange * 1 + twoChanges * 2 + threeChanges * 3 + fourPlusChanges * 4) / totalChanged).toFixed(1)
+      ? (filteredData
+          .filter(i => i.changeCount > 0)
+          .reduce((sum, i) => sum + i.changeCount, 0) / totalChanged).toFixed(1)
       : '0.0';
 
     const topMultiChange = filteredData
+      .filter(i => i.changeCount >= 2)
       .map(i => {
-        let count = 0;
-        for (let n = 2; n <= 6; n++) {
-          if (i[`change${n}_total`] !== null && i[`change${n}_total`] !== '') count++;
-        }
         const orig = getOriginalTotal(i);
         const lat = getLatestTotal(i);
-        return { ...i, changeCount: count, variance: Math.abs(lat - orig) };
+        return { ...i, variance: Math.abs(lat - orig) };
       })
-      .filter(i => i.changeCount >= 2)
       .sort((a, b) => b.changeCount - a.changeCount || b.variance - a.variance)
       .slice(0, 8);
 
     const supplierMultiMap = {};
-    filteredData.filter(i => i.change2_total).forEach(i => {
+    filteredData.filter(i => i.changeCount > 0).forEach(i => {
       const s = i.Supplier || 'Unknown';
       supplierMultiMap[s] = (supplierMultiMap[s] || 0) + 1;
     });
@@ -257,10 +379,10 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
       .sort((a,b) => (b.savings + b.increases) - (a.savings + a.increases));
 
     // 2. Price Change Distribution
-    const noChange = filteredData.filter(i => !i.change2_total).length;
-    const oneChange = filteredData.filter(i => i.change2_total && !i.change3_total).length;
-    const twoChanges = filteredData.filter(i => i.change3_total && !i.change4_total).length;
-    const threePlusChanges = filteredData.filter(i => i.change4_total).length;
+    const noChange = filteredData.filter(i => i.changeCount === 0).length;
+    const oneChange = filteredData.filter(i => i.changeCount === 1).length;
+    const twoChanges = filteredData.filter(i => i.changeCount === 2).length;
+    const threePlusChanges = filteredData.filter(i => i.changeCount >= 3).length;
 
     const distributionData = [
       { name: 'No Change', value: noChange },
@@ -592,7 +714,7 @@ const ReviewDashboard = ({ searchQuery = '' }) => {
                   <h4 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">Top Suppliers by Changes</h4>
                   <div className="space-y-3">
                     {multiChangeDetail?.topMultiSuppliers?.length ? (
-                      multiChangeDetail.topMultiSuppliers.map(([supplier, count], idx) => {
+                      multiChangeDetail.topMultiSuppliers.map(([supplier, count]) => {
                         const maxCount = multiChangeDetail.topMultiSuppliers[0][1];
                         const barWidth = maxCount > 0 ? (count / maxCount) * 100 : 0;
                         return (

@@ -37,6 +37,7 @@ next-env.d.ts
 !*.config.js
 !*.config.mjs
 !*.config.ts
+!src/utils/priceHistory.js
 *.html
 *.log
 src_old/

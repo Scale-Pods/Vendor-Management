@@ -8,6 +8,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  css: {
+    // Use this project's PostCSS config, not one from a parent directory.
+    // Tailwind itself is handled by the @tailwindcss/vite plugin above.
+    postcss: {
+      plugins: [],
+    },
+  },
   server: {
     proxy: {
       '/api/n8n': {

@@ -232,16 +232,22 @@ const PRTable = ({ showChangesOnly = false }) => {
                   <h4 className="text-[10px] font-bold text-[rgba(255,255,255,0.25)] uppercase tracking-[0.2em] flex items-center gap-2">
                     <History size={14} /> Revision History
                   </h4>
-                  <span className="text-[9px] px-2.5 py-0.5 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.1)] rounded-full font-black tracking-tighter">
-                    {selectedPR._history.length + 1} TOTAL VERSIONS
-                  </span>
+                  {selectedPR._history.length > 0 && (
+                    <span className="text-[9px] px-2.5 py-0.5 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.1)] rounded-full font-black tracking-tighter">
+                      {selectedPR._history.length + 1} TOTAL VERSIONS
+                    </span>
+                  )}
                 </div>
                 
-                <div className="space-y-4">
-                  {selectedPR._history.map((hist, idx) => (
-                    <HistoryCard key={idx} state={hist} />
-                  ))}
-                </div>
+                {selectedPR._history.length > 0 ? (
+                  <div className="space-y-4">
+                    {selectedPR._history.map((hist, idx) => (
+                      <HistoryCard key={idx} state={hist} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[rgba(255,255,255,0.35)] font-medium italic">No previous changes recorded yet.</p>
+                )}
               </section>
 
               <section>
